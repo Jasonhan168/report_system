@@ -1,0 +1,1 @@
+ALTER TABLE `report_modules` ADD `route` varchar(256);
