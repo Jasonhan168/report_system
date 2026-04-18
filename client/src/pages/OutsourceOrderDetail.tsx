@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Download, RefreshCw, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -31,6 +31,7 @@ export default function OutsourceOrderDetail() {
 
   // 检测是否从汇总表跳转而来（URL 中携带 fromSummary=1）
   const fromSummary = sp.get("fromSummary") === "1";
+  const [, navigate] = useLocation();
 
   // 从 URL 参数初始化筛选条件（支持从 WIP 汇总表跳转带参）
   const [date, setDate] = useState(sp.get("date") ?? TODAY);
@@ -132,6 +133,17 @@ export default function OutsourceOrderDetail() {
               <Filter size={11} />
               来自汇总表筛选
             </Badge>
+          )}
+          {/* 返回汇总表按鈕 */}
+          {fromSummary && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              onClick={() => navigate("/pkg-wip-summary")}
+            >
+              ← 返回汇总表
+            </Button>
           )}
         </div>
         <div className="flex gap-2">
