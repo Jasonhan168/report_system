@@ -215,8 +215,6 @@ export default function OutsourceOrderDetail() {
             ) : (
               <>
                 {rows.map((row, i) => {
-                  const rate = Number(row.received_rate ?? 0);
-                  const isLow = rate < 90;
                   return (
                     <TableRow key={i} className="hover:bg-muted/40">
                       <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
@@ -230,7 +228,7 @@ export default function OutsourceOrderDetail() {
                       <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
-                      <TableCell className={`text-right whitespace-nowrap font-medium ${isLow ? "text-red-500" : "text-amber-500"}`}>
+                      <TableCell className="text-right whitespace-nowrap">
                         {pct(row.received_rate)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{row.plant}</TableCell>

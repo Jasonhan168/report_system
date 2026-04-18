@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Download, RefreshCw, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 
@@ -27,6 +28,9 @@ export default function PkgWipDetail() {
   const search = useSearch();
   const sp = new URLSearchParams(search);
 
+  // 检测是否从汇总表跳转而来（URL 中携带 fromSummary=1）
+  const fromSummary = sp.get("fromSummary") === "1";
+
   // 从 URL 参数初始化筛选条件（支持从 WIP 汇总表跳转带参）
   const [date, setDate] = useState(sp.get("date") ?? TODAY);
   const [vendorName, setVendorName] = useState(sp.get("vendorName") ?? "");
@@ -34,6 +38,9 @@ export default function PkgWipDetail() {
   const [vendorPartNo, setVendorPartNo] = useState(sp.get("vendorPartNo") ?? "");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+
+  // 是否冻结筛选条件（从汇总表跳转时默认冻结）
+  const [filterLocked, setFilterLocked] = useState(fromSummary);
 
   const queryParams = useMemo(() => ({
     date: date || undefined,
@@ -55,8 +62,7 @@ export default function PkgWipDetail() {
     { enabled: !!permission?.allowed }
   );
 
-  // totalPages 基于过滤后的记录数计算（客户端过滤合计WIP=0）
-  // 注：分页以服务端返回的 pageSize=50 为基准，这里用过滤后数量估算分页
+  // 服务端已过滤合计WIP=0，total 直接使用服务端返回值
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
   async function handleExport() {
@@ -96,20 +102,9 @@ export default function PkgWipDetail() {
     );
   }
 
-  // 计算每行合计WIP数量，并过滤掉合计WIP=0的记录
-  const rawRows = data?.rows ?? [];
-  const rows = rawRows
-    .map(row => ({
-      ...row,
-      total_wip: (Number(row.die_attach) || 0)
-        + (Number(row.wire_bond) || 0)
-        + (Number(row.molding) || 0)
-        + (Number(row.testing) || 0)
-        + (Number(row.test_done) || 0),
-    }))
-    .filter(row => row.total_wip !== 0);
+  const rows = data?.rows ?? [];
 
-  // 合计行
+  // 合计行（使用后端返回的 total_wip 字段）
   const totalRow = rows.reduce(
     (acc, row) => ({
       die_attach: acc.die_attach + (Number(row.die_attach) || 0),
@@ -117,19 +112,39 @@ export default function PkgWipDetail() {
       molding: acc.molding + (Number(row.molding) || 0),
       testing: acc.testing + (Number(row.testing) || 0),
       test_done: acc.test_done + (Number(row.test_done) || 0),
-      total_wip: acc.total_wip + row.total_wip,
+      total_wip: acc.total_wip + (Number((row as typeof row & { total_wip?: number }).total_wip) || 0),
     }),
     { die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0, total_wip: 0 }
   );
 
-  const COL_COUNT = 12; // 日期+厂商+订单号+标签品名+供应商料号+批号+装片+焊线+塑封+测试+测试后+合计WIP
+  const COL_COUNT = 12;
 
   return (
     <div className="flex flex-col h-full gap-3 p-4">
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">封装厂WIP明细表</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold">封装厂WIP明细表</h1>
+          {/* 来自汇总表跳转的提示标签 */}
+          {fromSummary && (
+            <Badge className="bg-blue-100 text-blue-700 border-blue-300 gap-1 px-2 py-0.5 text-xs font-medium">
+              <Filter size={11} />
+              来自汇总表筛选
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2">
+          {/* 冻结/解锁筛选条件按钮 */}
+          {fromSummary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterLocked(v => !v)}
+              className={filterLocked ? "border-blue-400 text-blue-600 bg-blue-50 hover:bg-blue-100" : ""}
+            >
+              {filterLocked ? "解锁筛选" : "锁定筛选"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
@@ -143,14 +158,30 @@ export default function PkgWipDetail() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3">
+      <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
+        {filterLocked && (
+          <div className="w-full flex items-center gap-1.5 text-xs text-blue-600 mb-1">
+            <Filter size={11} />
+            筛选条件已锁定（来自汇总表跳转），点击“解锁筛选”可修改
+          </div>
+        )}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">日期</span>
-          <Input type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} className="w-40 h-8" />
+          <Input
+            type="date"
+            value={date}
+            onChange={e => { if (!filterLocked) { setDate(e.target.value); setPage(1); } }}
+            className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">委外厂商</span>
-          <Select value={vendorName || "__all__"} onValueChange={v => { setVendorName(v === "__all__" ? "" : v); setPage(1); }}>
+          <Select
+            value={vendorName || "__all__"}
+            onValueChange={v => { if (!filterLocked) { setVendorName(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked}
+          >
             <SelectTrigger className="w-40 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部</SelectItem>
@@ -160,11 +191,23 @@ export default function PkgWipDetail() {
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">标签品名</span>
-          <Input value={labelName} onChange={e => { setLabelName(e.target.value); setPage(1); }} placeholder="搜索..." className="w-40 h-8" />
+          <Input
+            value={labelName}
+            onChange={e => { if (!filterLocked) { setLabelName(e.target.value); setPage(1); } }}
+            placeholder="搜索..."
+            className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">供应商料号</span>
-          <Input value={vendorPartNo} onChange={e => { setVendorPartNo(e.target.value); setPage(1); }} placeholder="搜索..." className="w-36 h-8" />
+          <Input
+            value={vendorPartNo}
+            onChange={e => { if (!filterLocked) { setVendorPartNo(e.target.value); setPage(1); } }}
+            placeholder="搜索..."
+            className={`w-36 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <Button size="sm" className="h-8 mt-4" onClick={() => { setPage(1); refetch(); }}>
           <Search className="w-4 h-4 mr-1" /> 查询
@@ -173,7 +216,7 @@ export default function PkgWipDetail() {
 
       {/* 数据统计 */}
       <div className="text-sm text-muted-foreground">
-        共 <strong className="text-foreground">{rows.length}</strong> 条记录
+        共 <strong className="text-foreground">{data?.total ?? 0}</strong> 条记录
       </div>
 
       {/* 表格 */}
@@ -202,22 +245,25 @@ export default function PkgWipDetail() {
               <TableRow><TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
             ) : (
               <>
-                {rows.map((row, i) => (
-                  <TableRow key={i} className="hover:bg-muted/40">
-                    <TableCell className="whitespace-nowrap">{row.date}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
-                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.label_name}</TableCell>
-                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
-                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.batch_no}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(row.die_attach)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(row.wire_bond)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(row.molding)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(row.testing)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">{fmt(row.test_done)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap font-semibold text-primary">{fmtTotal(row.total_wip)}</TableCell>
-                  </TableRow>
-                ))}
+                {rows.map((row, i) => {
+                  const rowAny = row as typeof row & { total_wip?: number };
+                  return (
+                    <TableRow key={i} className="hover:bg-muted/40">
+                      <TableCell className="whitespace-nowrap">{row.date}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.label_name}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.batch_no}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.die_attach)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.wire_bond)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.molding)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.testing)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.test_done)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-semibold text-primary">{fmtTotal(rowAny.total_wip ?? 0)}</TableCell>
+                    </TableRow>
+                  );
+                })}
                 {/* 合计行 */}
                 {rows.length > 0 && (
                   <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">

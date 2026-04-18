@@ -432,6 +432,10 @@ export default function PkgWipSummary() {
                       ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
                       ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
                     }).toString();
+                    // WIP明细表跳转链接：加入 fromSummary=1 标识
+                    const wipDetailParams = linkParams + "&fromSummary=1";
+                    // 委外订单明细表跳转链接：不加 fromSummary
+                    const outsourceParams = linkParams;
                     return (
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>
@@ -439,7 +443,7 @@ export default function PkgWipSummary() {
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">
                         {rowAny.open_qty ? (
-                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${linkParams}`)}>
+                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${outsourceParams}`)}>
                             {fmtCell(rowAny.open_qty)}
                           </button>
                         ) : ""}
@@ -452,7 +456,7 @@ export default function PkgWipSummary() {
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs font-semibold">
                         {row.wip_qty !== 0 ? (
-                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => navigate(`/reports/pkg-wip-detail?${linkParams}`)}>
+                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => navigate(`/reports/pkg-wip-detail?${wipDetailParams}`)}>
                             {fmtCell(row.wip_qty)}
                           </button>
                         ) : ""}

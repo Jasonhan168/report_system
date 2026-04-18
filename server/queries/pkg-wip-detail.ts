@@ -12,6 +12,7 @@ export interface WipDetailRow {
   molding: number;
   testing: number;
   test_done: number;
+  total_wip: number;
 }
 
 export interface WipDetailFilters {
@@ -43,7 +44,10 @@ function buildWhere(filters: WipDetailFilters): string {
   return parts.join(" AND ");
 }
 
-/** 查询分页数据 */
+/** 合计WIP计算表达式 */
+const TOTAL_WIP_EXPR = `(die_attach + wire_bond + molding + testing + test_done)`;
+
+/** 查询分页数据（后端过滤合计WIP=0的记录） */
 export async function queryWipDetail(
   client: ClickHouseClient,
   filters: WipDetailFilters
@@ -53,7 +57,13 @@ export async function queryWipDetail(
   const pageSize = filters.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
 
-  const countSql = `SELECT count() AS cnt FROM wip_db.v_dwd_ab_wip WHERE ${where}`;
+  // 使用子查询在 WHERE 层过滤合计WIP>0，确保 count 与分页数据一致
+  const countSql = `
+    SELECT count() AS cnt
+    FROM wip_db.v_dwd_ab_wip
+    WHERE ${where}
+      AND ${TOTAL_WIP_EXPR} > 0
+  `;
   const dataSql = `
     SELECT
       toString(date) AS date,
@@ -66,9 +76,11 @@ export async function queryWipDetail(
       wire_bond,
       molding,
       testing,
-      test_done
+      test_done,
+      ${TOTAL_WIP_EXPR} AS total_wip
     FROM wip_db.v_dwd_ab_wip
     WHERE ${where}
+      AND ${TOTAL_WIP_EXPR} > 0
     ORDER BY date DESC, vendor_name, order_no
     LIMIT ${pageSize} OFFSET ${offset}
   `;
@@ -89,6 +101,7 @@ export async function queryWipDetail(
     molding: Number(row.molding),
     testing: Number(row.testing),
     test_done: Number(row.test_done),
+    total_wip: Number(row.total_wip),
   }));
 
   return { rows, total };
@@ -104,6 +117,7 @@ export async function queryWipDetailFilterOptions(
     SELECT groupUniqArray(vendor_name) AS vendor_names
     FROM wip_db.v_dwd_ab_wip
     WHERE date = '${esc(d)}'
+      AND ${TOTAL_WIP_EXPR} > 0
   `;
   type FilterResult = { data: { vendor_names: string[] }[] };
   const result = (await client.query({ query: sql }).then((r) => r.json())) as FilterResult;
@@ -113,7 +127,7 @@ export async function queryWipDetailFilterOptions(
   };
 }
 
-/** 导出全量数据（不分页） */
+/** 导出全量数据（不分页，后端过滤合计WIP=0） */
 export async function exportWipDetail(
   client: ClickHouseClient,
   filters: WipDetailFilters
@@ -131,9 +145,11 @@ export async function exportWipDetail(
       wire_bond,
       molding,
       testing,
-      test_done
+      test_done,
+      ${TOTAL_WIP_EXPR} AS total_wip
     FROM wip_db.v_dwd_ab_wip
     WHERE ${where}
+      AND ${TOTAL_WIP_EXPR} > 0
     ORDER BY date DESC, vendor_name, order_no
     LIMIT 999999
   `;
@@ -146,5 +162,6 @@ export async function exportWipDetail(
     molding: Number(row.molding),
     testing: Number(row.testing),
     test_done: Number(row.test_done),
+    total_wip: Number(row.total_wip),
   }));
 }
