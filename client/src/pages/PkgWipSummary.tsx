@@ -434,8 +434,8 @@ export default function PkgWipSummary() {
                     }).toString();
                     // WIP明细表跳转链接：加入 fromSummary=1 标识
                     const wipDetailParams = linkParams + "&fromSummary=1";
-                    // 委外订单明细表跳转链接：不加 fromSummary
-                    const outsourceParams = linkParams;
+                    // 委外订单明细表跳转链接：同样加入 fromSummary=1
+                    const outsourceParams = linkParams + "&fromSummary=1";
                     return (
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>

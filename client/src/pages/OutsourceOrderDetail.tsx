@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 
@@ -29,6 +29,9 @@ export default function OutsourceOrderDetail() {
   const search = useSearch();
   const sp = new URLSearchParams(search);
 
+  // 检测是否从汇总表跳转而来（URL 中携带 fromSummary=1）
+  const fromSummary = sp.get("fromSummary") === "1";
+
   // 从 URL 参数初始化筛选条件（支持从 WIP 汇总表跳转带参）
   const [date, setDate] = useState(sp.get("date") ?? TODAY);
   const [productionType, setProductionType] = useState(sp.get("productionType") ?? "");
@@ -38,6 +41,9 @@ export default function OutsourceOrderDetail() {
   const [plant, setPlant] = useState(sp.get("plant") ?? "");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+
+  // 是否冻结筛选条件（从汇总表跳转时默认冻结）
+  const [filterLocked, setFilterLocked] = useState(fromSummary);
 
   // 稳定化查询参数，避免无限 re-fetch
   const queryParams = useMemo(() => ({
@@ -118,8 +124,28 @@ export default function OutsourceOrderDetail() {
     <div className="flex flex-col h-full gap-3 p-4">
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">委外订单明细表</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold">委外订单明细表</h1>
+          {/* 来自汇总表跳转的提示标签 */}
+          {fromSummary && (
+            <Badge className="bg-blue-100 text-blue-700 border-blue-300 gap-1 px-2 py-0.5 text-xs font-medium">
+              <Filter size={11} />
+              来自汇总表筛选
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2">
+          {/* 冻结/解锁筛选条件按钮 */}
+          {fromSummary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterLocked(v => !v)}
+              className={filterLocked ? "border-blue-400 text-blue-600 bg-blue-50 hover:bg-blue-100" : ""}
+            >
+              {filterLocked ? "解锁筛选" : "锁定筛选"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
@@ -133,14 +159,30 @@ export default function OutsourceOrderDetail() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3">
+      <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
+        {filterLocked && (
+          <div className="w-full flex items-center gap-1.5 text-xs text-blue-600 mb-1">
+            <Filter size={11} />
+            筛选条件已锁定（来自汇总表跳转），点击"解锁筛选"可修改
+          </div>
+        )}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">日期</span>
-          <Input type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} className="w-40 h-8" />
+          <Input
+            type="date"
+            value={date}
+            onChange={e => { if (!filterLocked) { setDate(e.target.value); setPage(1); } }}
+            className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">工程量产</span>
-          <Select value={productionType || "__all__"} onValueChange={v => { setProductionType(v === "__all__" ? "" : v); setPage(1); }}>
+          <Select
+            value={productionType || "__all__"}
+            onValueChange={v => { if (!filterLocked) { setProductionType(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked}
+          >
             <SelectTrigger className="w-32 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部</SelectItem>
@@ -150,7 +192,11 @@ export default function OutsourceOrderDetail() {
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">委外厂商</span>
-          <Select value={vendorName || "__all__"} onValueChange={v => { setVendorName(v === "__all__" ? "" : v); setPage(1); }}>
+          <Select
+            value={vendorName || "__all__"}
+            onValueChange={v => { if (!filterLocked) { setVendorName(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked}
+          >
             <SelectTrigger className="w-40 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部</SelectItem>
@@ -160,15 +206,31 @@ export default function OutsourceOrderDetail() {
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">标签品名</span>
-          <Input value={labelName} onChange={e => { setLabelName(e.target.value); setPage(1); }} placeholder="搜索..." className="w-40 h-8" />
+          <Input
+            value={labelName}
+            onChange={e => { if (!filterLocked) { setLabelName(e.target.value); setPage(1); } }}
+            placeholder="搜索..."
+            className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">供应商料号</span>
-          <Input value={vendorPartNo} onChange={e => { setVendorPartNo(e.target.value); setPage(1); }} placeholder="搜索..." className="w-36 h-8" />
+          <Input
+            value={vendorPartNo}
+            onChange={e => { if (!filterLocked) { setVendorPartNo(e.target.value); setPage(1); } }}
+            placeholder="搜索..."
+            className={`w-36 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
+          />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">分公司</span>
-          <Select value={plant || "__all__"} onValueChange={v => { setPlant(v === "__all__" ? "" : v); setPage(1); }}>
+          <Select
+            value={plant || "__all__"}
+            onValueChange={v => { if (!filterLocked) { setPlant(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked}
+          >
             <SelectTrigger className="w-28 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部</SelectItem>
@@ -214,27 +276,23 @@ export default function OutsourceOrderDetail() {
               <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
             ) : (
               <>
-                {rows.map((row, i) => {
-                  return (
-                    <TableRow key={i} className="hover:bg-muted/40">
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.order_date}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.process_type}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.production_type}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.part_no}</TableCell>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.lot_no}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.lable}</TableCell>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        {pct(row.received_rate)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{row.plant}</TableCell>
-                    </TableRow>
-                  );
-                })}
+                {rows.map((row, i) => (
+                  <TableRow key={i} className="hover:bg-muted/40">
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.order_date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.process_type}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.production_type}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.part_no}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.lot_no}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.lable}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{pct(row.received_rate)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.plant}</TableCell>
+                  </TableRow>
+                ))}
                 {/* 合计行 */}
                 {rows.length > 0 && (
                   <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">

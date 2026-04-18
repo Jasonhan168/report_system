@@ -234,14 +234,14 @@ export function registerExportRoutes(app: Router) {
       const ws = wb.addWorksheet("封装厂WIP明细表");
 
       // 标题行
-      ws.mergeCells("A1:K1");
+      ws.mergeCells("A1:L1");
       const titleCell = ws.getCell("A1");
       titleCell.value = `封装厂WIP明细表  ${date}`;
       titleCell.font = { bold: true, size: 14, name: "微软雅黑" };
       titleCell.alignment = { horizontal: "center", vertical: "middle" };
       ws.getRow(1).height = 30;
 
-      const headers = ["日期", "委外厂商", "委外订单号", "标签品名", "供应商料号", "批号", "装片", "焊线", "塑封", "测试", "测试后"];
+      const headers = ["日期", "委外厂商", "委外订单号", "标签品名", "供应商料号", "批号", "装片", "焊线", "塑封", "测试", "测试后", "合计WIP数量"];
       const headerRow = ws.addRow(headers);
       headerRow.height = 22;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -253,9 +253,10 @@ export function registerExportRoutes(app: Router) {
       });
 
       rows.forEach((row, idx) => {
+        const totalWip = (Number(row.die_attach) || 0) + (Number(row.wire_bond) || 0) + (Number(row.molding) || 0) + (Number(row.testing) || 0) + (Number(row.test_done) || 0);
         const dataRow = ws.addRow([
           row.date, row.vendor_name, row.order_no, row.label_name, row.vendor_part_no, row.batch_no,
-          row.die_attach, row.wire_bond, row.molding, row.testing, row.test_done,
+          row.die_attach, row.wire_bond, row.molding, row.testing, row.test_done, totalWip,
         ]);
         dataRow.height = 18;
         const bgColor = idx % 2 === 0 ? "FFFFFFFF" : "FFF5F7FA";
@@ -268,7 +269,7 @@ export function registerExportRoutes(app: Router) {
         });
       });
 
-      [12, 18, 16, 20, 18, 14, 10, 10, 10, 10, 10].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+      [12, 18, 16, 20, 18, 14, 10, 10, 10, 10, 10, 14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
       ws.views = [{ state: "frozen", ySplit: 2 }];
 
       const nameParts = ["封装厂WIP明细表", date];
