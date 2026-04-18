@@ -18,6 +18,11 @@ function fmt(v: number | string | null | undefined): string {
   return n.toLocaleString();
 }
 
+function fmtTotal(v: number): string {
+  if (v === 0) return "";
+  return v.toLocaleString();
+}
+
 export default function PkgWipDetail() {
   const search = useSearch();
   const sp = new URLSearchParams(search);
@@ -50,6 +55,8 @@ export default function PkgWipDetail() {
     { enabled: !!permission?.allowed }
   );
 
+  // totalPages 基于过滤后的记录数计算（客户端过滤合计WIP=0）
+  // 注：分页以服务端返回的 pageSize=50 为基准，这里用过滤后数量估算分页
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
   async function handleExport() {
@@ -89,7 +96,33 @@ export default function PkgWipDetail() {
     );
   }
 
-  const rows = data?.rows ?? [];
+  // 计算每行合计WIP数量，并过滤掉合计WIP=0的记录
+  const rawRows = data?.rows ?? [];
+  const rows = rawRows
+    .map(row => ({
+      ...row,
+      total_wip: (Number(row.die_attach) || 0)
+        + (Number(row.wire_bond) || 0)
+        + (Number(row.molding) || 0)
+        + (Number(row.testing) || 0)
+        + (Number(row.test_done) || 0),
+    }))
+    .filter(row => row.total_wip !== 0);
+
+  // 合计行
+  const totalRow = rows.reduce(
+    (acc, row) => ({
+      die_attach: acc.die_attach + (Number(row.die_attach) || 0),
+      wire_bond: acc.wire_bond + (Number(row.wire_bond) || 0),
+      molding: acc.molding + (Number(row.molding) || 0),
+      testing: acc.testing + (Number(row.testing) || 0),
+      test_done: acc.test_done + (Number(row.test_done) || 0),
+      total_wip: acc.total_wip + row.total_wip,
+    }),
+    { die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0, total_wip: 0 }
+  );
+
+  const COL_COUNT = 12; // 日期+厂商+订单号+标签品名+供应商料号+批号+装片+焊线+塑封+测试+测试后+合计WIP
 
   return (
     <div className="flex flex-col h-full gap-3 p-4">
@@ -140,7 +173,7 @@ export default function PkgWipDetail() {
 
       {/* 数据统计 */}
       <div className="text-sm text-muted-foreground">
-        共 <strong className="text-foreground">{data?.total ?? 0}</strong> 条记录
+        共 <strong className="text-foreground">{rows.length}</strong> 条记录
       </div>
 
       {/* 表格 */}
@@ -159,28 +192,46 @@ export default function PkgWipDetail() {
               <TableHead className="whitespace-nowrap text-right">塑封</TableHead>
               <TableHead className="whitespace-nowrap text-right">测试</TableHead>
               <TableHead className="whitespace-nowrap text-right">测试后</TableHead>
+              <TableHead className="whitespace-nowrap text-right font-bold text-primary">合计WIP数量</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">加载中...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
-            ) : rows.map((row, i) => (
-              <TableRow key={i} className="hover:bg-muted/40">
-                <TableCell className="whitespace-nowrap">{row.date}</TableCell>
-                <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
-                <TableCell className="whitespace-nowrap">{row.label_name}</TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
-                <TableCell className="font-mono text-xs whitespace-nowrap">{row.batch_no}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">{fmt(row.die_attach)}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">{fmt(row.wire_bond)}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">{fmt(row.molding)}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">{fmt(row.testing)}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">{fmt(row.test_done)}</TableCell>
-              </TableRow>
-            ))}
+              <TableRow><TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
+            ) : (
+              <>
+                {rows.map((row, i) => (
+                  <TableRow key={i} className="hover:bg-muted/40">
+                    <TableCell className="whitespace-nowrap">{row.date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.label_name}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{row.batch_no}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.die_attach)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.wire_bond)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.molding)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.testing)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">{fmt(row.test_done)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap font-semibold text-primary">{fmtTotal(row.total_wip)}</TableCell>
+                  </TableRow>
+                ))}
+                {/* 合计行 */}
+                {rows.length > 0 && (
+                  <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">
+                    <TableCell colSpan={6} className="text-primary text-xs font-bold">合计</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.die_attach)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.wire_bond)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.molding)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.testing)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.test_done)}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs text-primary">{fmtTotal(totalRow.total_wip)}</TableCell>
+                  </TableRow>
+                )}
+              </>
+            )}
           </TableBody>
         </Table>
       </div>

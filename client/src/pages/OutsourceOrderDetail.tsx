@@ -105,6 +105,15 @@ export default function OutsourceOrderDetail() {
 
   const rows = data?.rows ?? [];
 
+  // 合计行：下单数量、未回货数量
+  const totalRow = rows.reduce(
+    (acc, row) => ({
+      qty: acc.qty + (Number(row.qty) || 0),
+      open_qty: acc.open_qty + (Number(row.open_qty) || 0),
+    }),
+    { qty: 0, open_qty: 0 }
+  );
+
   return (
     <div className="flex flex-col h-full gap-3 p-4">
       {/* 标题栏 */}
@@ -203,29 +212,43 @@ export default function OutsourceOrderDetail() {
               <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : rows.length === 0 ? (
               <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
-            ) : rows.map((row, i) => {
-              const rate = Number(row.received_rate ?? 0);
-              const isLow = rate < 90;
-              return (
-                <TableRow key={i} className="hover:bg-muted/40">
-                  <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.order_date}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.process_type}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.production_type}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap">{row.part_no}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap">{row.lot_no}</TableCell>
-                  <TableCell className="whitespace-nowrap">{row.lable}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
-                  <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
-                  <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
-                  <TableCell className={`text-right whitespace-nowrap font-medium ${isLow ? "text-red-500" : "text-amber-500"}`}>
-                    {pct(row.received_rate)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{row.plant}</TableCell>
-                </TableRow>
-              );
-            })}
+            ) : (
+              <>
+                {rows.map((row, i) => {
+                  const rate = Number(row.received_rate ?? 0);
+                  const isLow = rate < 90;
+                  return (
+                    <TableRow key={i} className="hover:bg-muted/40">
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.order_date}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.process_type}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.production_type}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.part_no}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.lot_no}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.lable}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
+                      <TableCell className={`text-right whitespace-nowrap font-medium ${isLow ? "text-red-500" : "text-amber-500"}`}>
+                        {pct(row.received_rate)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{row.plant}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* 合计行 */}
+                {rows.length > 0 && (
+                  <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">
+                    <TableCell colSpan={9} className="text-primary text-xs font-bold">合计</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{totalRow.qty > 0 ? totalRow.qty.toLocaleString() : ""}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{totalRow.open_qty > 0 ? totalRow.open_qty.toLocaleString() : ""}</TableCell>
+                    <TableCell />
+                    <TableCell />
+                  </TableRow>
+                )}
+              </>
+            )}
           </TableBody>
         </Table>
       </div>

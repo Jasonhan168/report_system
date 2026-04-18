@@ -395,7 +395,7 @@ export default function PkgWipSummary() {
           <Table className="text-sm">
             <TableHeader>
               <TableRow className="bg-secondary/50 hover:bg-secondary/50">
-                {["标签品名","供应商料号","供应商","未投数量","装片","焊线","塑封","测试","测试后-入库","合计WIP数量","未回货数量"].map((h, i) => (
+                {["标签品名","供应商料号","供应商","未回货数量","未投数量","装片","焊线","塑封","测试","测试后-入库","合计WIP数量"].map((h, i) => (
                   <TableHead key={h} className={cn("text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3", i >= 3 && "text-right")}>
                     {h}
                   </TableHead>
@@ -437,6 +437,13 @@ export default function PkgWipSummary() {
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {rowAny.open_qty ? (
+                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${linkParams}`)}>
+                            {fmtCell(rowAny.open_qty)}
+                          </button>
+                        ) : ""}
+                      </TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.unissued_qty)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.die_attach)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.wire_bond)}</TableCell>
@@ -450,19 +457,13 @@ export default function PkgWipSummary() {
                           </button>
                         ) : ""}
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">
-                        {rowAny.open_qty ? (
-                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${linkParams}`)}>
-                            {fmtCell(rowAny.open_qty)}
-                          </button>
-                        ) : ""}
-                      </TableCell>
                     </TableRow>
                     );
                   })}
                   {data?.totalRow && (
                     <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
                       <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={3}>合计</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell((data.totalRow as typeof data.totalRow & { open_qty?: number }).open_qty ?? 0)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.unissued_qty)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.die_attach)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.wire_bond)}</TableCell>
@@ -470,7 +471,6 @@ export default function PkgWipSummary() {
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.testing)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.test_done)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold text-primary">{fmtCell(data.totalRow.wip_qty)}</TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell((data.totalRow as typeof data.totalRow & { open_qty?: number }).open_qty ?? 0)}</TableCell>
                     </TableRow>
                   )}
                 </>
