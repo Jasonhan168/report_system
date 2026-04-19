@@ -176,7 +176,7 @@ export function registerExportRoutes(app: Router) {
         outsourceTotals.open_qty += Number(row.open_qty) || 0;
         const dataRow = ws.addRow([
           row.order_no, row.order_date, row.process_type, row.production_type,
-          row.vendor_name, row.part_no, row.lot_no, row.lable, row.vendor_part_no,
+          row.vendor_name, row.part_no, row.lot_no, row.label, row.vendor_part_no,
           row.qty, row.open_qty, row.received_rate, row.plant,
         ]);
         dataRow.height = 18;

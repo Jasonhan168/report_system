@@ -8,7 +8,7 @@ export interface OutsourceOrderRow {
   vendor_name: string;
   part_no: string;
   lot_no: string;
-  lable: string;
+  label: string;
   vendor_part_no: string;
   qty: number;
   open_qty: number;
@@ -45,7 +45,7 @@ function buildWhere(filters: OutsourceOrderFilters): string {
     parts.push(`lower(vendor_name) LIKE lower('%${esc(filters.vendorName)}%')`);
   }
   if (filters.labelName) {
-    parts.push(`lower(lable) LIKE lower('%${esc(filters.labelName)}%')`);
+    parts.push(`lower(label) LIKE lower('%${esc(filters.labelName)}%')`);
   }
   if (filters.vendorPartNo) {
     parts.push(`lower(vendor_part_no) LIKE lower('%${esc(filters.vendorPartNo)}%')`);
@@ -76,7 +76,7 @@ export async function queryOutsourceOrderDetail(
       vendor_name,
       part_no,
       lot_no,
-      lable,
+      label,
       vendor_part_no,
       qty,
       open_qty,
@@ -150,7 +150,7 @@ export async function exportOutsourceOrderDetail(
       vendor_name,
       part_no,
       lot_no,
-      lable,
+      label,
       vendor_part_no,
       qty,
       open_qty,
