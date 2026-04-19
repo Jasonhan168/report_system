@@ -151,14 +151,14 @@ export function registerExportRoutes(app: Router) {
       const ws = wb.addWorksheet("委外订单明细表");
 
       // 标题行
-      ws.mergeCells("A1:M1");
+      ws.mergeCells("A1:O1");
       const titleCell = ws.getCell("A1");
       titleCell.value = `委外订单明细表  ${date}`;
       titleCell.font = { bold: true, size: 14, name: "微软雅黑" };
       titleCell.alignment = { horizontal: "center", vertical: "middle" };
       ws.getRow(1).height = 30;
 
-      const headers = ["订单号", "订单日期", "工序类型", "工程量产", "委外厂商", "料号", "批号", "标签品名", "供应商料号", "订单数量", "未回货数量", "回货率(%)", "分公司"];
+      const headers = ["订单号", "订单日期", "预计交期", "工序类型", "工程量产", "委外厂商", "料号", "批号", "标签品名", "供应商料号", "订单数量", "未回货数量", "回货率(%)", "分公司", "拖期天数"];
       const headerRow = ws.addRow(headers);
       headerRow.height = 22;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,10 +174,13 @@ export function registerExportRoutes(app: Router) {
       rows.forEach((row, idx) => {
         outsourceTotals.qty += Number(row.qty) || 0;
         outsourceTotals.open_qty += Number(row.open_qty) || 0;
+        const eddDate = row.edd ? new Date(row.edd) : null;
+        const today = new Date(new Date().toISOString().slice(0, 10));
+        const overdueDays = eddDate ? Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         const dataRow = ws.addRow([
-          row.order_no, row.order_date, row.process_type, row.production_type,
-          row.vendor_name, row.part_no, row.lot_no, row.label, row.vendor_part_no,
-          row.qty, row.open_qty, row.received_rate, row.plant,
+          row.order_no, row.order_date, row.edd || "", row.process_type, row.production_type,
+          row.vendor_name, row.part_no, row.lot_no, row.lable, row.vendor_part_no,
+          row.qty, row.open_qty, row.received_rate, row.plant, overdueDays > 0 ? overdueDays : "",
         ]);
         dataRow.height = 18;
         const bgColor = idx % 2 === 0 ? "FFFFFFFF" : "FFF5F7FA";
@@ -191,8 +194,8 @@ export function registerExportRoutes(app: Router) {
       });
       // 合计行
       if (rows.length > 0) {
-        const sumRow = ws.addRow(["合计", "", "", "", "", "", "", "", "",
-          outsourceTotals.qty, outsourceTotals.open_qty, "", "",
+        const sumRow = ws.addRow(["合计", "", "", "", "", "", "", "", "", "",
+          outsourceTotals.qty, outsourceTotals.open_qty, "", "", "",
         ]);
         sumRow.height = 20;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -204,7 +207,7 @@ export function registerExportRoutes(app: Router) {
         });
       }
 
-      [16, 12, 12, 12, 18, 14, 12, 20, 18, 12, 12, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+      [16, 12, 12, 12, 12, 18, 14, 12, 20, 18, 12, 12, 12, 12, 10].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
       ws.views = [{ state: "frozen", ySplit: 2 }];
 
       const nameParts = ["委外订单明细表", date];

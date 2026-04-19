@@ -3,12 +3,13 @@ import type { ClickHouseClient } from "@clickhouse/client";
 export interface OutsourceOrderRow {
   order_no: string;
   order_date: string;
+  edd: string;           // 预计交期
   process_type: string;
   production_type: string;
   vendor_name: string;
   part_no: string;
   lot_no: string;
-  label: string;
+  lable: string;
   vendor_part_no: string;
   qty: number;
   open_qty: number;
@@ -45,7 +46,7 @@ function buildWhere(filters: OutsourceOrderFilters): string {
     parts.push(`lower(vendor_name) LIKE lower('%${esc(filters.vendorName)}%')`);
   }
   if (filters.labelName) {
-    parts.push(`lower(label) LIKE lower('%${esc(filters.labelName)}%')`);
+    parts.push(`lower(lable) LIKE lower('%${esc(filters.labelName)}%')`);
   }
   if (filters.vendorPartNo) {
     parts.push(`lower(vendor_part_no) LIKE lower('%${esc(filters.vendorPartNo)}%')`);
@@ -55,6 +56,23 @@ function buildWhere(filters: OutsourceOrderFilters): string {
   }
   return parts.join(" AND ");
 }
+
+const SELECT_COLS = `
+  order_no,
+  toString(order_date) AS order_date,
+  toString(edd) AS edd,
+  process_type,
+  production_type,
+  vendor_name,
+  part_no,
+  lot_no,
+  lable,
+  vendor_part_no,
+  qty,
+  open_qty,
+  received_rate,
+  plant
+`;
 
 /** 查询分页数据 */
 export async function queryOutsourceOrderDetail(
@@ -68,20 +86,7 @@ export async function queryOutsourceOrderDetail(
 
   const countSql = `SELECT count() AS cnt FROM wip_db.v_dwd_order WHERE ${where}`;
   const dataSql = `
-    SELECT
-      order_no,
-      toString(order_date) AS order_date,
-      process_type,
-      production_type,
-      vendor_name,
-      part_no,
-      lot_no,
-      label,
-      vendor_part_no,
-      qty,
-      open_qty,
-      received_rate,
-      plant
+    SELECT ${SELECT_COLS}
     FROM wip_db.v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
@@ -142,20 +147,7 @@ export async function exportOutsourceOrderDetail(
 ): Promise<OutsourceOrderRow[]> {
   const where = buildWhere(filters);
   const sql = `
-    SELECT
-      order_no,
-      toString(order_date) AS order_date,
-      process_type,
-      production_type,
-      vendor_name,
-      part_no,
-      lot_no,
-      label,
-      vendor_part_no,
-      qty,
-      open_qty,
-      received_rate,
-      plant
+    SELECT ${SELECT_COLS}
     FROM wip_db.v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no

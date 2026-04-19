@@ -138,7 +138,7 @@ export default function PkgWipDetail() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-              onClick={() => navigate("/pkg-wip-summary")}
+              onClick={() => navigate("/reports/pkg-wip-summary")}
             >
               ← 返回汇总表
             </Button>
@@ -170,12 +170,6 @@ export default function PkgWipDetail() {
 
       {/* 筛选栏 */}
       <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
-        {filterLocked && (
-          <div className="w-full flex items-center gap-1.5 text-xs text-blue-600 mb-1">
-            <Filter size={11} />
-            筛选条件已锁定（来自汇总表跳转），点击“解锁筛选”可修改
-          </div>
-        )}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">日期</span>
           <Input
