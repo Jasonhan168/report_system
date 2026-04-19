@@ -179,7 +179,7 @@ export function registerExportRoutes(app: Router) {
         const overdueDays = eddDate ? Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
         const dataRow = ws.addRow([
           row.order_no, row.order_date, row.edd || "", row.process_type, row.production_type,
-          row.vendor_name, row.part_no, row.lot_no, row.lable, row.vendor_part_no,
+          row.vendor_name, row.part_no, row.lot_no, row.label, row.vendor_part_no,
           row.qty, row.open_qty, row.received_rate, row.plant, overdueDays > 0 ? overdueDays : "",
         ]);
         dataRow.height = 18;

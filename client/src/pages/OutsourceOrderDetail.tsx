@@ -322,7 +322,7 @@ export default function OutsourceOrderDetail() {
                     <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
                     <TableCell className="font-mono text-xs whitespace-nowrap">{row.part_no}</TableCell>
                     <TableCell className="font-mono text-xs whitespace-nowrap">{row.lot_no}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.lable}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.label}</TableCell>
                     <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">{fmt(row.qty)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
