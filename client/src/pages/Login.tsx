@@ -89,7 +89,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-2xl bg-[oklch(0.50_0.20_245)] flex items-center justify-center shadow-lg mb-3">
             <BarChart3 size={22} className="text-white" />
           </div>
-          <h1 className="text-xl font-bold text-[oklch(0.25_0.10_250)]">西山居报表查询系统</h1>
+          <h1 className="text-xl font-bold text-[oklch(0.25_0.10_250)]">昂宝集成电路有限公司</h1>
         </div>
 
         <div className="w-full max-w-sm">
