@@ -54,7 +54,7 @@ export default function Login() {
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
             <BarChart3 size={18} className="text-white" />
           </div>
-          <span className="text-white font-bold text-lg tracking-wide">西山居报表查询系统</span>
+          <span className="text-white font-bold text-lg tracking-wide">昂宝集成电路有限公司</span>
         </div>
 
         {/* 中央文案 */}
