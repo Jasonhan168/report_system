@@ -60,7 +60,7 @@ export default function Login() {
         {/* 中央文案 */}
         <div className="relative z-10">
           <h2 className="text-4xl font-bold text-white leading-tight mb-4">
-            企业级<br />数据报表<br />管理平台
+            昂宝<br />数据报表<br />管理平台
           </h2>
           <p className="text-white/70 text-base leading-relaxed">
             实时查询封装厂 WIP 数据、委外订单状态，<br />
