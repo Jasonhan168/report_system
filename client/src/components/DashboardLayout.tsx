@@ -267,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="w-7 h-7 rounded-md bg-[oklch(0.72_0.16_75)] flex items-center justify-center flex-shrink-0">
                 <BarChart3 size={14} className="text-[oklch(0.15_0.05_75)]" />
               </div>
-              <span className="text-sidebar-foreground font-semibold text-sm tracking-wide flex-1 truncate">西山居报表查询系统</span>
+              <span className="text-sidebar-foreground font-semibold text-sm tracking-wide flex-1 truncate">昂宝集成电路</span>
             </>
           )}
           <button
@@ -302,7 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="w-7 h-7 rounded-md bg-[oklch(0.72_0.16_75)] flex items-center justify-center">
                 <BarChart3 size={14} className="text-[oklch(0.15_0.05_75)]" />
               </div>
-              <span className="text-sidebar-foreground font-semibold text-sm">西山居报表查询系统</span>
+              <span className="text-sidebar-foreground font-semibold text-sm">昂宝集成电路</span>
             </div>
             <SidebarNav isAdmin={isAdmin} location={location} onNavigate={() => setMobileOpen(false)} />
             <div className="border-t border-sidebar-border p-2">
@@ -325,7 +325,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           <div className="flex-1 flex items-center gap-2 text-sm min-w-0">
-            <span className="text-muted-foreground shrink-0">西山居报表查询系统</span>
+            <span className="text-muted-foreground shrink-0">昂宝集成电路</span>
             <ChevronRight size={13} className="text-muted-foreground/50 shrink-0" />
             <span className="font-medium text-foreground truncate">{currentLabel}</span>
           </div>
