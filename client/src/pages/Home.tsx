@@ -27,7 +27,7 @@ export default function Home() {
           <h1 className="text-3xl font-bold text-white mb-2">
             你好，{user?.name || "用户"} 👋
           </h1>
-          <p className="text-white/70 text-sm">欢迎使用报表查询系统，以下是您可访问的报表模块</p>
+          <p className="text-white/70 text-sm">欢迎使用西山居报表查询系统，以下是您可访问的报表模块</p>
         </div>
         {/* 装饰圆形 */}
         <div className="absolute right-0 top-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/3 translate-x-1/4" />

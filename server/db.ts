@@ -316,7 +316,7 @@ export async function initDefaultData() {
     { key: "ad_domain", value: "", description: "AD域名称", category: "auth" },
     { key: "ad_base_dn", value: "", description: "AD Base DN", category: "auth" },
     { key: "ad_bind_user", value: "", description: "AD绑定用户", category: "auth" },
-    { key: "system_name", value: "报表查询系统", description: "系统名称", category: "general" },
+    { key: "system_name", value: "西山居报表查询系统", description: "系统名称", category: "general" },
     { key: "company_name", value: "", description: "公司名称", category: "general" },
   ];
 

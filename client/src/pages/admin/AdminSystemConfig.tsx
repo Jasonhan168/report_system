@@ -33,7 +33,7 @@ export default function AdminSystemConfig() {
     {
       title: "系统基础配置",
       items: [
-        { key: "system_title", label: "系统标题", placeholder: "报表查询系统", description: "显示在页面标题栏" },
+        { key: "system_title", label: "系统标题", placeholder: "西山居报表查询系统", description: "显示在页面标题栏" },
         { key: "session_timeout", label: "会话超时(分钟)", placeholder: "480", description: "用户登录会话有效时间" },
         { key: "max_export_rows", label: "最大导出行数", placeholder: "50000", description: "单次导出最大数据行数" },
       ],

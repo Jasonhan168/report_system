@@ -54,7 +54,7 @@ export default function Login() {
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
             <BarChart3 size={18} className="text-white" />
           </div>
-          <span className="text-white font-bold text-lg tracking-wide">报表查询系统</span>
+          <span className="text-white font-bold text-lg tracking-wide">西山居报表查询系统</span>
         </div>
 
         {/* 中央文案 */}
@@ -78,7 +78,7 @@ export default function Login() {
 
         {/* 底部版权 */}
         <p className="relative z-10 text-white/35 text-xs">
-          © {new Date().getFullYear()} 报表查询系统 · 企业内部使用
+          © {new Date().getFullYear()} 西山居报表查询系统 · 企业内部使用
         </p>
       </div>
 
@@ -89,7 +89,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-2xl bg-[oklch(0.50_0.20_245)] flex items-center justify-center shadow-lg mb-3">
             <BarChart3 size={22} className="text-white" />
           </div>
-          <h1 className="text-xl font-bold text-[oklch(0.25_0.10_250)]">报表查询系统</h1>
+          <h1 className="text-xl font-bold text-[oklch(0.25_0.10_250)]">西山居报表查询系统</h1>
         </div>
 
         <div className="w-full max-w-sm">
@@ -171,7 +171,7 @@ export default function Login() {
           </form>
 
           <p className="text-center text-[oklch(0.65_0.05_250)] text-xs mt-8">
-            © {new Date().getFullYear()} 报表查询系统 · 企业内部使用
+            © {new Date().getFullYear()} 西山居报表查询系统 · 企业内部使用
           </p>
         </div>
       </div>
