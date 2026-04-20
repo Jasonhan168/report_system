@@ -25,6 +25,34 @@ function pct(v: number | string | null | undefined): string {
   return `${n.toFixed(1)}%`;
 }
 
+/** 计算拖期天数：当前日期 - 预计交期，小于0则返回0 */
+function calcOverdueDays(edd: string | null | undefined): number {
+  if (!edd) return 0;
+  const today = new Date(TODAY);
+  const eddDate = new Date(edd);
+  if (isNaN(eddDate.getTime())) return 0;
+  const diff = Math.floor((today.getTime() - eddDate.getTime()) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 0;
+}
+
+/** 计算距交期剩余天数（负数表示已拖期） */
+function daysUntilEdd(edd: string | null | undefined): number | null {
+  if (!edd) return null;
+  const today = new Date(TODAY);
+  const eddDate = new Date(edd);
+  if (isNaN(eddDate.getTime())) return null;
+  return Math.floor((eddDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** 返回行高亮样式：拖期=红色，临近交期(<=5天)=黄色 */
+function rowHighlight(edd: string | null | undefined): string {
+  const remaining = daysUntilEdd(edd);
+  if (remaining === null) return "";
+  if (remaining < 0) return "bg-red-50 hover:bg-red-100";   // 拖期
+  if (remaining <= 5) return "bg-amber-50 hover:bg-amber-100"; // 临近交期
+  return "hover:bg-muted/40";
+}
+
 export default function OutsourceOrderDetail() {
   const search = useSearch();
   const sp = new URLSearchParams(search);
@@ -140,7 +168,7 @@ export default function OutsourceOrderDetail() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-              onClick={() => navigate("/pkg-wip-summary")}
+              onClick={() => navigate("/reports/pkg-wip-summary")}
             >
               ← 返回汇总表
             </Button>
@@ -172,12 +200,6 @@ export default function OutsourceOrderDetail() {
 
       {/* 筛选栏 */}
       <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
-        {filterLocked && (
-          <div className="w-full flex items-center gap-1.5 text-xs text-blue-600 mb-1">
-            <Filter size={11} />
-            筛选条件已锁定（来自汇总表跳转），点击"解锁筛选"可修改
-          </div>
-        )}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">日期</span>
           <Input
@@ -268,6 +290,7 @@ export default function OutsourceOrderDetail() {
             <TableRow>
               <TableHead className="whitespace-nowrap">委外订单号</TableHead>
               <TableHead className="whitespace-nowrap">下单日期</TableHead>
+              <TableHead className="whitespace-nowrap">预计交期</TableHead>
               <TableHead className="whitespace-nowrap">加工类型</TableHead>
               <TableHead className="whitespace-nowrap">工程量产</TableHead>
               <TableHead className="whitespace-nowrap">委外厂商</TableHead>
@@ -279,19 +302,21 @@ export default function OutsourceOrderDetail() {
               <TableHead className="whitespace-nowrap text-right">未回货数量</TableHead>
               <TableHead className="whitespace-nowrap text-right">回货率</TableHead>
               <TableHead className="whitespace-nowrap">分公司</TableHead>
+              <TableHead className="whitespace-nowrap text-right">拖期天数</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">加载中...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={15} className="text-center py-12 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
+              <TableRow><TableCell colSpan={15} className="text-center py-12 text-muted-foreground">暂无数据</TableCell></TableRow>
             ) : (
               <>
                 {rows.map((row, i) => (
-                  <TableRow key={i} className="hover:bg-muted/40">
+                  <TableRow key={i} className={rowHighlight(row.edd)}>
                     <TableCell className="font-mono text-xs whitespace-nowrap">{row.order_no}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.order_date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.edd || ""}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.process_type}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.production_type}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.vendor_name}</TableCell>
@@ -303,14 +328,18 @@ export default function OutsourceOrderDetail() {
                     <TableCell className="text-right whitespace-nowrap">{fmt(row.open_qty)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">{pct(row.received_rate)}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.plant}</TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      {(() => { const d = calcOverdueDays(row.edd); return d > 0 ? <span className="text-red-600 font-semibold">{d}</span> : ""; })()}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {/* 合计行 */}
                 {rows.length > 0 && (
                   <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">
-                    <TableCell colSpan={9} className="text-primary text-xs font-bold">合计</TableCell>
+                    <TableCell colSpan={10} className="text-primary text-xs font-bold">合计</TableCell>
                     <TableCell className="text-right whitespace-nowrap text-xs">{totalRow.qty > 0 ? totalRow.qty.toLocaleString() : ""}</TableCell>
                     <TableCell className="text-right whitespace-nowrap text-xs">{totalRow.open_qty > 0 ? totalRow.open_qty.toLocaleString() : ""}</TableCell>
+                    <TableCell />
                     <TableCell />
                     <TableCell />
                   </TableRow>
