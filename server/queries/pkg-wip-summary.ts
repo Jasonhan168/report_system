@@ -92,14 +92,15 @@ SELECT
     label_name,
     vendor_part_no,
     vendor_name,
-    sum(unissued_qty) AS unissued_qty,
-    sum(open_qty)     AS open_qty,
-    sum(die_attach)   AS die_attach,
-    sum(wire_bond)    AS wire_bond,
-    sum(molding)      AS molding,
-    sum(testing)      AS testing,
-    sum(test_done)    AS test_done,
-    sum(wip_qty)      AS wip_qty
+    sum(unissued_qty)        AS unissued_qty,
+    sum(open_qty)            AS open_qty,
+    sum(die_attach)          AS die_attach,
+    sum(wire_bond)           AS wire_bond,
+    sum(molding)             AS molding,
+    sum(testing)             AS testing,
+    sum(test_done)           AS test_done,
+    sum(wip_qty)             AS wip_qty,
+    groupArray(order_no)     AS order_nos
 FROM (${INNER_SQL})
 WHERE ${where}
 GROUP BY label_name, vendor_part_no, vendor_name
@@ -107,7 +108,7 @@ ORDER BY label_name, vendor_name
 LIMIT ${pageSize} OFFSET ${offset}`;
 
   const dataResult = await client.query({ query: dataSql, format: "JSONEachRow" });
-  const rawRows = await dataResult.json<Record<string, string>>();
+  const rawRows = await dataResult.json<Record<string, unknown>>();
   const data: WipRecord[] = rawRows.map(toWipRecord);
 
   // 3. 合计行（全量聚合，不受分页影响）
@@ -187,11 +188,19 @@ export async function exportWipData(
 }
 
 // ─── 工具函数 ─────────────────────────────────────────────────────────────────
-function toWipRecord(row: Record<string, string>): WipRecord {
+function toWipRecord(row: Record<string, unknown>): WipRecord {
+  // order_nos 可能是数组或 JSON 字符串，统一解析为 string[]
+  let order_nos: string[] = [];
+  const raw = row.order_nos;
+  if (Array.isArray(raw)) {
+    order_nos = raw.map(String);
+  } else if (typeof raw === "string" && raw.startsWith("[")) {
+    try { order_nos = JSON.parse(raw); } catch { order_nos = []; }
+  }
   return {
-    label_name: row.label_name ?? "",
-    vendor_part_no: row.vendor_part_no ?? "",
-    vendor_name: row.vendor_name ?? "",
+    label_name: String(row.label_name ?? ""),
+    vendor_part_no: String(row.vendor_part_no ?? ""),
+    vendor_name: String(row.vendor_name ?? ""),
     unissued_qty: Number(row.unissued_qty ?? 0),
     open_qty: Number(row.open_qty ?? 0),
     die_attach: Number(row.die_attach ?? 0),
@@ -200,5 +209,6 @@ function toWipRecord(row: Record<string, string>): WipRecord {
     testing: Number(row.testing ?? 0),
     test_done: Number(row.test_done ?? 0),
     wip_qty: Number(row.wip_qty ?? 0),
+    order_nos,
   };
 }

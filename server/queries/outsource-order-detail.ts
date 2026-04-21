@@ -24,6 +24,7 @@ export interface OutsourceOrderFilters {
   labelName?: string;      // 标签品名（模糊）
   vendorPartNo?: string;   // 供应商料号（模糊）
   plant?: string;          // 分公司（模糊）
+  orderNos?: string[];     // 精确匹配订单号列表（来自汇总表跳转）
   page?: number;
   pageSize?: number;
 }
@@ -53,6 +54,10 @@ function buildWhere(filters: OutsourceOrderFilters): string {
   }
   if (filters.plant) {
     parts.push(`lower(plant) LIKE lower('%${esc(filters.plant)}%')`);
+  }
+  if (filters.orderNos && filters.orderNos.length > 0) {
+    const inList = filters.orderNos.map((n) => `'${esc(n)}'`).join(",");
+    parts.push(`order_no IN (${inList})`);
   }
   return parts.join(" AND ");
 }

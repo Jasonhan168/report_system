@@ -61,6 +61,14 @@ export default function OutsourceOrderDetail() {
   const fromSummary = sp.get("fromSummary") === "1";
   const [, navigate] = useLocation();
 
+  // 汇总表过滤条件（用于返回时恢复）
+  const summaryDate = sp.get("summaryDate") ?? "";
+  const summaryLabelName = sp.get("summaryLabelName") ?? "";
+  const summaryVendorName = sp.get("summaryVendorName") ?? "";
+
+  // 从 URL 解析 orderNos（多值参数）
+  const orderNos = useMemo(() => sp.getAll("orderNos"), [search]);
+
   // 从 URL 参数初始化筛选条件（支持从 WIP 汇总表跳转带参）
   const [date, setDate] = useState(sp.get("date") ?? TODAY);
   const [productionType, setProductionType] = useState(sp.get("productionType") ?? "");
@@ -82,9 +90,10 @@ export default function OutsourceOrderDetail() {
     labelName: labelName || undefined,
     vendorPartNo: vendorPartNo || undefined,
     plant: plant || undefined,
+    orderNos: orderNos.length > 0 ? orderNos : undefined,
     page,
     pageSize: 50,
-  }), [date, productionType, vendorName, labelName, vendorPartNo, plant, page]);
+  }), [date, productionType, vendorName, labelName, vendorPartNo, plant, orderNos, page]);
 
   const { data: permission } = trpc.outsourceOrderDetail.checkPermission.useQuery({ type: "view" });
   const { data: exportPermission } = trpc.outsourceOrderDetail.checkPermission.useQuery({ type: "export" });
@@ -113,6 +122,8 @@ export default function OutsourceOrderDetail() {
       if (labelName) params.set("labelName", labelName);
       if (vendorPartNo) params.set("vendorPartNo", vendorPartNo);
       if (plant) params.set("plant", plant);
+      // 将 orderNos 数组逐个附加为多个参数
+      orderNos.forEach((no) => params.append("orderNos", no));
       const resp = await fetch(`/api/export/outsource-order-detail?${params}`);
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
@@ -168,7 +179,14 @@ export default function OutsourceOrderDetail() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-              onClick={() => navigate("/reports/pkg-wip-summary")}
+              onClick={() => {
+                const backParams = new URLSearchParams();
+                if (summaryDate) backParams.set("summaryDate", summaryDate);
+                if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
+                if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                const qs = backParams.toString();
+                navigate(`/reports/pkg-wip-summary${qs ? `?${qs}` : ""}`);
+              }}
             >
               ← 返回汇总表
             </Button>

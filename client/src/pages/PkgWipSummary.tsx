@@ -192,13 +192,19 @@ export default function PkgWipSummary() {
   const today = new Date().toISOString().slice(0, 10);
   const [, navigate] = useLocation();
 
-  const [date, setDate] = useState(today);
-  const [labelName, setLabelName] = useState("");   // "" = 全部
-  const [vendorName, setVendorName] = useState(""); // "" = 全部
+  // 从 URL 读取返回时恢复的筛选条件
+  const initParams = new URLSearchParams(window.location.search);
+  const initDate = initParams.get("summaryDate") || today;
+  const initLabelName = initParams.get("summaryLabelName") || "";
+  const initVendorName = initParams.get("summaryVendorName") || "";
+
+  const [date, setDate] = useState(initDate);
+  const [labelName, setLabelName] = useState(initLabelName);   // "" = 全部
+  const [vendorName, setVendorName] = useState(initVendorName); // "" = 全部
   const [pageSize, setPageSize] = useState(20);
 
   const [queryParams, setQueryParams] = useState({
-    date: today, labelName: "", vendorName: "", page: 1, pageSize: 20,
+    date: initDate, labelName: initLabelName, vendorName: initVendorName, page: 1, pageSize: 20,
   });
 
   const { data: viewPerm } = trpc.pkgWipSummary.checkPermission.useQuery({ type: "view" });
@@ -425,17 +431,40 @@ export default function PkgWipSummary() {
               ) : (
                 <>
                   {data?.data.map((row, idx) => {
-                    const rowAny = row as typeof row & { open_qty?: number };
-                    const linkParams = new URLSearchParams({
+                    const rowAny = row as typeof row & { open_qty?: number; order_nos?: string[] };
+                    // 汇总表当前筛选条件，返回时用于恢复
+                    const summaryBack = new URLSearchParams({
+                      ...(queryParams.date ? { summaryDate: queryParams.date } : {}),
+                      ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
+                      ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
+                    }).toString();
+                    // WIP明细表跳转链接
+                    const wipDetailParams = new URLSearchParams({
                       date: queryParams.date,
                       ...(row.label_name ? { labelName: row.label_name } : {}),
                       ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
                       ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      ...(queryParams.date ? { summaryDate: queryParams.date } : {}),
+                      ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
+                      ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
                     }).toString();
-                    // WIP明细表跳转链接：加入 fromSummary=1 标识
-                    const wipDetailParams = linkParams + "&fromSummary=1";
-                    // 委外订单明细表跳转链接：同样加入 fromSummary=1
-                    const outsourceParams = linkParams + "&fromSummary=1";
+                    // 委外订单明细表跳转链接：附加 orderNos 列表和 summary* 参数
+                    const outsourceBase = new URLSearchParams({
+                      date: queryParams.date,
+                      ...(row.label_name ? { labelName: row.label_name } : {}),
+                      ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
+                      ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      ...(queryParams.date ? { summaryDate: queryParams.date } : {}),
+                      ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
+                      ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
+                    });
+                    // 将 order_nos 数组逐个附加为多个 orderNos 参数
+                    if (rowAny.order_nos && rowAny.order_nos.length > 0) {
+                      rowAny.order_nos.forEach((no) => outsourceBase.append("orderNos", no));
+                    }
+                    const outsourceParams = outsourceBase.toString();
                     return (
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>

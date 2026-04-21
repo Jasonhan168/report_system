@@ -12,6 +12,7 @@ export interface WipRecord {
   testing: number;
   test_done: number;
   wip_qty: number;
+  order_nos?: string[];  // 该行关联的所有订单号（用于跳转过滤）
 }
 
 const LABEL_NAMES = [

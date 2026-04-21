@@ -480,6 +480,7 @@ export const appRouter = router({
         labelName: z.string().optional(),
         vendorPartNo: z.string().optional(),
         plant: z.string().optional(),
+        orderNos: z.array(z.string()).optional(),
         page: z.number().min(1).default(1),
         pageSize: z.number().min(1).max(200).default(50),
       }))
@@ -506,6 +507,7 @@ export const appRouter = router({
         labelName: z.string().optional(),
         vendorPartNo: z.string().optional(),
         plant: z.string().optional(),
+        orderNos: z.array(z.string()).optional(),
       }))
       .query(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") {

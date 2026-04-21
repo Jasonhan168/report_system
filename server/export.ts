@@ -137,6 +137,11 @@ export function registerExportRoutes(app: Router) {
       const vendorPartNo = (req.query.vendorPartNo as string) || "";
       const plant = (req.query.plant as string) || "";
       const productionType = (req.query.productionType as string) || "";
+      // 解析 orderNos 多值参数
+      const orderNosRaw = req.query.orderNos;
+      const orderNos: string[] | undefined = Array.isArray(orderNosRaw)
+        ? (orderNosRaw as string[])
+        : typeof orderNosRaw === "string" ? [orderNosRaw] : undefined;
 
       const ds = await getReportModuleDatasource("outsource_order_detail");
       if (!ds || ds.type !== "clickhouse") {
@@ -145,7 +150,7 @@ export function registerExportRoutes(app: Router) {
       }
 
       const client = getClickHouseClient(ds);
-      const rows = await exportOutsourceOrderDetail(client, { date, vendorName, labelName, vendorPartNo, plant, productionType });
+      const rows = await exportOutsourceOrderDetail(client, { date, vendorName, labelName, vendorPartNo, plant, productionType, orderNos });
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("委外订单明细表");

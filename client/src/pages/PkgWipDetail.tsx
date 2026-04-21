@@ -31,6 +31,11 @@ export default function PkgWipDetail() {
   const fromSummary = sp.get("fromSummary") === "1";
   const [, navigate] = useLocation();
 
+  // 汇总表过滤条件（用于返回时恢复）
+  const summaryDate = sp.get("summaryDate") ?? "";
+  const summaryLabelName = sp.get("summaryLabelName") ?? "";
+  const summaryVendorName = sp.get("summaryVendorName") ?? "";
+
   // 从 URL 参数初始化筛选条件（支持从 WIP 汇总表跳转带参）
   const [date, setDate] = useState(sp.get("date") ?? TODAY);
   const [vendorName, setVendorName] = useState(sp.get("vendorName") ?? "");
@@ -138,7 +143,14 @@ export default function PkgWipDetail() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-              onClick={() => navigate("/reports/pkg-wip-summary")}
+              onClick={() => {
+                const backParams = new URLSearchParams();
+                if (summaryDate) backParams.set("summaryDate", summaryDate);
+                if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
+                if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                const qs = backParams.toString();
+                navigate(`/reports/pkg-wip-summary${qs ? `?${qs}` : ""}`);
+              }}
             >
               ← 返回汇总表
             </Button>
