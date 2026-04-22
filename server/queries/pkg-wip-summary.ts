@@ -4,8 +4,8 @@
  * 兼容 ClickHouse 18.16.1（不支持 param_* 参数化、不支持 ILIKE）
  *
  * 数据来源：
- *   wip_db.v_dwd_ab_wip_agg  (wip)
- *   wip_db.v_dwd_order_agg   (ord)
+ *   v_dwd_ab_wip_agg  (wip)
+ *   v_dwd_order_agg   (ord)
  */
 import type { ClickHouseClient } from "@clickhouse/client";
 import type { WipRecord } from "../mockData";
@@ -42,8 +42,8 @@ SELECT
     wip.testing,
     wip.test_done,
     (((wip.die_attach + wip.wire_bond) + wip.molding) + wip.testing) + wip.test_done AS wip_qty
-FROM wip_db.v_dwd_ab_wip_agg AS wip
-LEFT JOIN wip_db.v_dwd_order_agg AS ord
+FROM v_dwd_ab_wip_agg AS wip
+LEFT JOIN v_dwd_order_agg AS ord
     ON  wip.date           = ord.date
     AND wip.order_no       = ord.order_no
     AND wip.vendor_part_no = ord.vendor_part_no`;

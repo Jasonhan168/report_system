@@ -89,10 +89,10 @@ export async function queryOutsourceOrderDetail(
   const pageSize = filters.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
 
-  const countSql = `SELECT count() AS cnt FROM wip_db.v_dwd_order WHERE ${where}`;
+  const countSql = `SELECT count() AS cnt FROM v_dwd_order WHERE ${where}`;
   const dataSql = `
     SELECT ${SELECT_COLS}
-    FROM wip_db.v_dwd_order
+    FROM v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT ${pageSize} OFFSET ${offset}
@@ -132,7 +132,7 @@ export async function queryOutsourceOrderFilterOptions(
       groupUniqArray(production_type) AS production_types,
       groupUniqArray(vendor_name) AS vendor_names,
       groupUniqArray(plant) AS plants
-    FROM wip_db.v_dwd_order
+    FROM v_dwd_order
     WHERE date = '${esc(d)}' AND received_rate < 98
   `;
   type FilterResult = { data: { production_types: string[]; vendor_names: string[]; plants: string[] }[] };
@@ -153,7 +153,7 @@ export async function exportOutsourceOrderDetail(
   const where = buildWhere(filters);
   const sql = `
     SELECT ${SELECT_COLS}
-    FROM wip_db.v_dwd_order
+    FROM v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT 999999

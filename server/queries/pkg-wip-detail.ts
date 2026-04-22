@@ -60,7 +60,7 @@ export async function queryWipDetail(
   // 使用子查询在 WHERE 层过滤合计WIP>0，确保 count 与分页数据一致
   const countSql = `
     SELECT count() AS cnt
-    FROM wip_db.v_dwd_ab_wip
+    FROM v_dwd_ab_wip
     WHERE ${where}
       AND ${TOTAL_WIP_EXPR} > 0
   `;
@@ -78,7 +78,7 @@ export async function queryWipDetail(
       testing,
       test_done,
       ${TOTAL_WIP_EXPR} AS total_wip
-    FROM wip_db.v_dwd_ab_wip
+    FROM v_dwd_ab_wip
     WHERE ${where}
       AND ${TOTAL_WIP_EXPR} > 0
     ORDER BY date DESC, vendor_name, order_no
@@ -115,7 +115,7 @@ export async function queryWipDetailFilterOptions(
   const d = date || new Date().toISOString().slice(0, 10);
   const sql = `
     SELECT groupUniqArray(vendor_name) AS vendor_names
-    FROM wip_db.v_dwd_ab_wip
+    FROM v_dwd_ab_wip
     WHERE date = '${esc(d)}'
       AND ${TOTAL_WIP_EXPR} > 0
   `;
@@ -147,7 +147,7 @@ export async function exportWipDetail(
       testing,
       test_done,
       ${TOTAL_WIP_EXPR} AS total_wip
-    FROM wip_db.v_dwd_ab_wip
+    FROM v_dwd_ab_wip
     WHERE ${where}
       AND ${TOTAL_WIP_EXPR} > 0
     ORDER BY date DESC, vendor_name, order_no
