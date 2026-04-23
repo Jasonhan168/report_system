@@ -36,7 +36,7 @@ SELECT
 --    wip.vendor_name,
     ord.date,
     ord.order_no,
-    ord.label_name,
+    ord.label,
     ord.vendor_part_no,
     ord.vendor_name,
     ((((ord.open_qty - wip.die_attach) - wip.wire_bond) - wip.molding) - wip.testing) - wip.test_done AS unissued_qty,
