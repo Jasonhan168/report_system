@@ -43,7 +43,8 @@ SELECT
     wip.test_done,
     (((wip.die_attach + wip.wire_bond) + wip.molding) + wip.testing) + wip.test_done AS wip_qty
 FROM v_dwd_ab_wip_agg AS wip
-LEFT JOIN v_dwd_order_agg AS ord
+-- LEFT JOIN v_dwd_order_agg AS ord
+RIGHT JOIN v_dwd_order_agg AS ord
     ON  wip.date           = ord.date
     AND wip.order_no       = ord.order_no
     AND wip.vendor_part_no = ord.vendor_part_no`;
