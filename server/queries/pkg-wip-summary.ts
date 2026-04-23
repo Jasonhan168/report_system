@@ -29,11 +29,16 @@ function escStr(val: string): string {
 // 注意：必须显式带出 date 字段，外层 WHERE 才能引用
 const INNER_SQL = `
 SELECT
-    wip.date,
-    wip.order_no,
-    wip.label_name,
-    wip.vendor_part_no,
-    wip.vendor_name,
+--    wip.date,
+--    wip.order_no,
+--    wip.label_name,
+--    wip.vendor_part_no,
+--    wip.vendor_name,
+    ord.date,
+    ord.order_no,
+    ord.label_name,
+    ord.vendor_part_no,
+    ord.vendor_name,
     ((((ord.open_qty - wip.die_attach) - wip.wire_bond) - wip.molding) - wip.testing) - wip.test_done AS unissued_qty,
     ord.open_qty,
     wip.die_attach,
