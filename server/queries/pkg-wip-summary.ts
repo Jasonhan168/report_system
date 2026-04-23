@@ -36,7 +36,7 @@ SELECT
 --    wip.vendor_name,
     ord.date,
     ord.order_no,
-    ifnull(wip.label_name,ord.label) as label_name,
+    if(length(trim(ifNull(wip.label_name, ''))) = 0, ord.label, wip.label_name) as label_name,
     ord.vendor_part_no,
     ord.vendor_name,
     ((((ord.open_qty - wip.die_attach) - wip.wire_bond) - wip.molding) - wip.testing) - wip.test_done AS unissued_qty,
