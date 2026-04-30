@@ -87,6 +87,9 @@ export async function queryWipInprocDetail(
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
+  // 调试日志：打印完整 SQL，方便直接拷到 ClickHouse 执行
+  console.log("[pkg-wip-inproc-detail] dataSql =\n", dataSql);
+
   type CountResult = { data: { cnt: string }[] };
   type DataResult = { data: WipInprocDetailRow[] };
 
@@ -96,10 +99,7 @@ export async function queryWipInprocDetail(
   ]);
 
   const total = parseInt((countResult as CountResult).data[0]?.cnt ?? "0", 10);
-  // 调试日志：跟踪查询结果（排查无数据问题）
-  if (total === 0) {
-    console.log("[pkg-wip-inproc-detail] 查询返回 0 条，当前 WHERE:", where);
-  }
+  console.log(`[pkg-wip-inproc-detail] count=${total}, returned rows=${(dataResult as DataResult).data?.length ?? 0}`);
   const rows = ((dataResult as DataResult).data ?? []).map((row) => ({
     ...row,
     die_attach: Number(row.die_attach),
