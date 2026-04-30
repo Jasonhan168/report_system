@@ -32,34 +32,34 @@ function esc(val: string): string {
   return val.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-/** 合计WIP计算表达式 */
-const TOTAL_WIP_EXPR = `(die_attach + wire_bond + molding + testing + test_done)`;
+/** 合计WIP计算表达式（Null 安全） */
+const TOTAL_WIP_EXPR = `(ifNull(die_attach, 0) + ifNull(wire_bond, 0) + ifNull(molding, 0) + ifNull(testing, 0) + ifNull(test_done, 0))`;
 
 function buildWhere(filters: WipInprocDetailFilters): string {
   const parts: string[] = [`${TOTAL_WIP_EXPR} > 0`];
   if (filters.vendorName) {
-    parts.push(`lower(vendor_name) LIKE lower('%${esc(filters.vendorName)}%')`);
+    parts.push(`lower(ifNull(vendor_name, '')) LIKE lower('%${esc(filters.vendorName)}%')`);
   }
   if (filters.labelName) {
-    parts.push(`lower(label_name) LIKE lower('%${esc(filters.labelName)}%')`);
+    parts.push(`lower(ifNull(label_name, '')) LIKE lower('%${esc(filters.labelName)}%')`);
   }
   if (filters.vendorPartNo) {
-    parts.push(`lower(vendor_part_no) LIKE lower('%${esc(filters.vendorPartNo)}%')`);
+    parts.push(`lower(ifNull(vendor_part_no, '')) LIKE lower('%${esc(filters.vendorPartNo)}%')`);
   }
   return parts.join(" AND ");
 }
 
 const SELECT_COLS = `
-  vendor_name,
-  order_no,
-  label_name,
-  vendor_part_no,
-  batch_no,
-  die_attach,
-  wire_bond,
-  molding,
-  testing,
-  test_done,
+  ifNull(vendor_name, '') AS vendor_name,
+  ifNull(order_no, '') AS order_no,
+  ifNull(label_name, '') AS label_name,
+  ifNull(vendor_part_no, '') AS vendor_part_no,
+  ifNull(batch_no, '') AS batch_no,
+  ifNull(die_attach, 0) AS die_attach,
+  ifNull(wire_bond, 0) AS wire_bond,
+  ifNull(molding, 0) AS molding,
+  ifNull(testing, 0) AS testing,
+  ifNull(test_done, 0) AS test_done,
   ${TOTAL_WIP_EXPR} AS total_wip,
   toString(update_time) AS update_time
 `;
@@ -96,6 +96,10 @@ export async function queryWipInprocDetail(
   ]);
 
   const total = parseInt((countResult as CountResult).data[0]?.cnt ?? "0", 10);
+  // 调试日志：跟踪查询结果（排查无数据问题）
+  if (total === 0) {
+    console.log("[pkg-wip-inproc-detail] 查询返回 0 条，当前 WHERE:", where);
+  }
   const rows = ((dataResult as DataResult).data ?? []).map((row) => ({
     ...row,
     die_attach: Number(row.die_attach),
@@ -114,7 +118,7 @@ export async function queryWipInprocDetailFilterOptions(
   client: ClickHouseClient
 ): Promise<{ vendorNames: string[] }> {
   const sql = `
-    SELECT groupUniqArray(vendor_name) AS vendor_names
+    SELECT groupUniqArray(ifNull(vendor_name, '')) AS vendor_names
     FROM v_dws_ab_wip
     WHERE ${TOTAL_WIP_EXPR} > 0
   `;
