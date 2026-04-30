@@ -87,7 +87,7 @@ export default function PkgWipDetail() {
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const parts = ["封装厂WIP明细表", date, vendorName, labelName].filter(Boolean);
+      const parts = ["原封装厂WIP明细表", date, vendorName, labelName].filter(Boolean);
       a.download = `${parts.join("_")}.xlsx`;
       a.href = url;
       a.click();
@@ -129,7 +129,7 @@ export default function PkgWipDetail() {
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">封装厂WIP明细表</h1>
+          <h1 className="text-xl font-semibold">原封装厂WIP明细表</h1>
           {/* 来自汇总表跳转的提示标签 */}
           {fromSummary && (
             <Badge className="bg-blue-100 text-blue-700 border-blue-300 gap-1 px-2 py-0.5 text-xs font-medium">

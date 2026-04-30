@@ -25,6 +25,11 @@ import {
   queryWipDetailFilterOptions,
   exportWipDetail,
 } from "./queries/pkg-wip-detail";
+import {
+  queryWipInprocDetail,
+  queryWipInprocDetailFilterOptions,
+  exportWipInprocDetail,
+} from "./queries/pkg-wip-inproc-detail";
 import { authenticate, hashPassword, verifyPassword } from "./auth";
 import { sdk } from "./_core/sdk";
 import { ENV } from "./_core/env";
@@ -596,6 +601,79 @@ export const appRouter = router({
         if (ds && ds.type === "clickhouse") {
           const client = getClickHouseClient(ds);
           return exportWipDetail(client, input);
+        }
+        return [];
+      }),
+  }),
+
+  // ─── 封装厂在制品明细表 ──────────────────────────────────────────────────────
+  pkgWipInprocDetail: router({
+    checkPermission: protectedProcedure
+      .input(z.object({ type: z.enum(["view", "export"]) }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role === "admin") return { allowed: true };
+        const module = await getReportModuleByCode("pkg_wip_inproc_detail");
+        if (!module) return { allowed: false };
+        const allowed = await checkUserReportPermission(ctx.user.id, module.id, input.type);
+        return { allowed };
+      }),
+
+    filterOptions: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") {
+          const module = await getReportModuleByCode("pkg_wip_inproc_detail");
+          if (!module) throw new TRPCError({ code: "FORBIDDEN", message: "无查看权限" });
+          const allowed = await checkUserReportPermission(ctx.user.id, module.id, "view");
+          if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "无查看权限" });
+        }
+        const ds = await getReportModuleDatasource("pkg_wip_inproc_detail");
+        if (ds && ds.type === "clickhouse") {
+          const client = getClickHouseClient(ds);
+          return queryWipInprocDetailFilterOptions(client);
+        }
+        return { vendorNames: [] };
+      }),
+
+    query: protectedProcedure
+      .input(z.object({
+        vendorName: z.string().optional(),
+        labelName: z.string().optional(),
+        vendorPartNo: z.string().optional(),
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(200).default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          const module = await getReportModuleByCode("pkg_wip_inproc_detail");
+          if (!module) throw new TRPCError({ code: "FORBIDDEN", message: "无查看权限" });
+          const allowed = await checkUserReportPermission(ctx.user.id, module.id, "view");
+          if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "无查看权限" });
+        }
+        const ds = await getReportModuleDatasource("pkg_wip_inproc_detail");
+        if (ds && ds.type === "clickhouse") {
+          const client = getClickHouseClient(ds);
+          return queryWipInprocDetail(client, input);
+        }
+        return { rows: [], total: 0 };
+      }),
+
+    exportData: protectedProcedure
+      .input(z.object({
+        vendorName: z.string().optional(),
+        labelName: z.string().optional(),
+        vendorPartNo: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          const module = await getReportModuleByCode("pkg_wip_inproc_detail");
+          if (!module) throw new TRPCError({ code: "FORBIDDEN", message: "无导出权限" });
+          const allowed = await checkUserReportPermission(ctx.user.id, module.id, "export");
+          if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "无导出权限" });
+        }
+        const ds = await getReportModuleDatasource("pkg_wip_inproc_detail");
+        if (ds && ds.type === "clickhouse") {
+          const client = getClickHouseClient(ds);
+          return exportWipInprocDetail(client, input);
         }
         return [];
       }),

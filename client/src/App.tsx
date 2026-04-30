@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import PkgWipSummary from "./pages/PkgWipSummary";
 import OutsourceOrderDetail from "./pages/OutsourceOrderDetail";
 import PkgWipDetail from "./pages/PkgWipDetail";
+import PkgWipInprocDetail from "./pages/PkgWipInprocDetail";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminPermissions from "./pages/admin/AdminPermissions";
 import AdminReportModules from "./pages/admin/AdminReportModules";
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/reports/pkg-wip-summary" component={PkgWipSummary} />
         <Route path="/reports/outsource-order-detail" component={OutsourceOrderDetail} />
         <Route path="/reports/pkg-wip-detail" component={PkgWipDetail} />
+        <Route path="/reports/pkg-wip-inproc-detail" component={PkgWipInprocDetail} />
         <Route path="/admin/users" component={AdminUsers} />
         <Route path="/admin/permissions" component={AdminPermissions} />
         <Route path="/admin/report-modules" component={AdminReportModules} />

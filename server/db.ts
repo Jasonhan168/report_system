@@ -294,12 +294,21 @@ export async function initDefaultData() {
     },
     {
       code: "pkg_wip_detail",
-      name: "封装厂WIP明细表",
+      name: "原封装厂WIP明细表",
       category: "生产报表",
-      description: "按日期查询封装厂WIP明细数据",
+      description: "按日期查询封装厂WIP明细数据（来源：v_dwd_ab_wip）",
       route: "/reports/pkg-wip-detail",
       isActive: true,
       sortOrder: 30,
+    },
+    {
+      code: "pkg_wip_inproc_detail",
+      name: "封装厂在制品明细表",
+      category: "生产报表",
+      description: "封装厂在制品当前快照明细（来源：v_dws_ab_wip，带进度更新时间）",
+      route: "/reports/pkg-wip-inproc-detail",
+      isActive: true,
+      sortOrder: 40,
     },
   ];
   const existingModules = await getAllReportModules();
@@ -309,6 +318,13 @@ export async function initDefaultData() {
       await db.insert(reportModules).values(mod);
     }
   }
+
+  // 兼容老数据：若旧封装厂WIP明细表名称未更新，则重命名为“原封装厂WIP明细表”
+  await db
+    .update(reportModules)
+    .set({ name: "原封装厂WIP明细表" })
+    .where(and(eq(reportModules.code, "pkg_wip_detail"), eq(reportModules.name, "封装厂WIP明细表")))
+    .catch(() => {});
 
   // 默认系统配置
   const defaultConfigs = [

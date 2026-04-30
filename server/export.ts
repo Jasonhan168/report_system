@@ -7,6 +7,7 @@ import { getClickHouseClient } from "./datasource";
 import { exportWipData } from "./queries/pkg-wip-summary";
 import { exportOutsourceOrderDetail } from "./queries/outsource-order-detail";
 import { exportWipDetail } from "./queries/pkg-wip-detail";
+import { exportWipInprocDetail } from "./queries/pkg-wip-inproc-detail";
 import { COOKIE_NAME } from "@shared/const";
 
 /** 通用：从请求中解析用户 */
@@ -257,12 +258,12 @@ export function registerExportRoutes(app: Router) {
       const rows = await exportWipDetail(client, { date, vendorName, labelName, vendorPartNo });
 
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("封装厂WIP明细表");
+      const ws = wb.addWorksheet("原封装厂WIP明细表");
 
       // 标题行
       ws.mergeCells("A1:L1");
       const titleCell = ws.getCell("A1");
-      titleCell.value = `封装厂WIP明细表  ${date}`;
+      titleCell.value = `原封装厂WIP明细表  ${date}`;
       titleCell.font = { bold: true, size: 14, name: "微软雅黑" };
       titleCell.alignment = { horizontal: "center", vertical: "middle" };
       ws.getRow(1).height = 30;
@@ -321,7 +322,7 @@ export function registerExportRoutes(app: Router) {
       [12, 18, 16, 20, 18, 14, 10, 10, 10, 10, 10, 14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
       ws.views = [{ state: "frozen", ySplit: 2 }];
 
-      const nameParts = ["封装厂WIP明细表", date];
+      const nameParts = ["原封装厂WIP明细表", date];
       if (vendorName) nameParts.push(vendorName);
       else if (labelName) nameParts.push(labelName);
       const filename = encodeURIComponent(`${nameParts.join("_")}.xlsx`);
@@ -331,6 +332,112 @@ export function registerExportRoutes(app: Router) {
       res.end();
     } catch (err) {
       console.error("[Export] pkg-wip-detail error:", err);
+      if (!res.headersSent) res.status(500).json({ error: "导出失败，请重试" });
+    }
+  });
+
+  // GET /api/export/pkg-wip-inproc-detail?vendorName=...&labelName=...&vendorPartNo=...
+  app.get("/api/export/pkg-wip-inproc-detail", async (req, res) => {
+    try {
+      const user = await resolveUser(req);
+      if (!user) { res.status(401).json({ error: "未登录或会话已过期" }); return; }
+
+      if (user.role !== "admin") {
+        const module = await getReportModuleByCode("pkg_wip_inproc_detail");
+        if (!module) { res.status(403).json({ error: "无导出权限" }); return; }
+        const allowed = await checkUserReportPermission(user.id, module.id, "export");
+        if (!allowed) { res.status(403).json({ error: "无导出权限" }); return; }
+      }
+
+      const vendorName = (req.query.vendorName as string) || "";
+      const labelName = (req.query.labelName as string) || "";
+      const vendorPartNo = (req.query.vendorPartNo as string) || "";
+
+      const ds = await getReportModuleDatasource("pkg_wip_inproc_detail");
+      if (!ds || ds.type !== "clickhouse") {
+        res.status(400).json({ error: "数据源未配置" });
+        return;
+      }
+
+      const client = getClickHouseClient(ds);
+      const rows = await exportWipInprocDetail(client, { vendorName, labelName, vendorPartNo });
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("封装厂在制品明细表");
+
+      // 标题行
+      const today = new Date().toISOString().slice(0, 10);
+      ws.mergeCells("A1:L1");
+      const titleCell = ws.getCell("A1");
+      titleCell.value = `封装厂在制品明细表  ${today}`;
+      titleCell.font = { bold: true, size: 14, name: "微软雅黑" };
+      titleCell.alignment = { horizontal: "center", vertical: "middle" };
+      ws.getRow(1).height = 30;
+
+      const headers = ["委外厂商", "委外订单号", "标签品名", "供应商料号", "批号", "装片", "焊线", "塑封", "测试", "测试后", "合计WIP数量", "进度更新"];
+      const headerRow = ws.addRow(headers);
+      headerRow.height = 22;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      headerRow.eachCell((cell: any) => {
+        cell.font = { bold: true, size: 10, name: "微软雅黑", color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = { top: { style: "thin", color: { argb: "FFB8C8E0" } }, bottom: { style: "thin", color: { argb: "FFB8C8E0" } }, left: { style: "thin", color: { argb: "FFB8C8E0" } }, right: { style: "thin", color: { argb: "FFB8C8E0" } } };
+      });
+
+      // 累计合计数据
+      const totals = { die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0, total_wip: 0 };
+      rows.forEach((row, idx) => {
+        const totalWip = (Number(row.die_attach) || 0) + (Number(row.wire_bond) || 0) + (Number(row.molding) || 0) + (Number(row.testing) || 0) + (Number(row.test_done) || 0);
+        totals.die_attach += Number(row.die_attach) || 0;
+        totals.wire_bond += Number(row.wire_bond) || 0;
+        totals.molding += Number(row.molding) || 0;
+        totals.testing += Number(row.testing) || 0;
+        totals.test_done += Number(row.test_done) || 0;
+        totals.total_wip += totalWip;
+        const dataRow = ws.addRow([
+          row.vendor_name, row.order_no, row.label_name, row.vendor_part_no, row.batch_no,
+          row.die_attach, row.wire_bond, row.molding, row.testing, row.test_done, totalWip, row.update_time,
+        ]);
+        dataRow.height = 18;
+        const bgColor = idx % 2 === 0 ? "FFFFFFFF" : "FFF5F7FA";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        dataRow.eachCell((cell: any, colNum: number) => {
+          cell.font = { size: 10, name: "微软雅黑" };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+          cell.alignment = { horizontal: colNum <= 5 ? "left" : "center", vertical: "middle" };
+          cell.border = { top: { style: "hair", color: { argb: "FFE0E8F0" } }, bottom: { style: "hair", color: { argb: "FFE0E8F0" } }, left: { style: "hair", color: { argb: "FFE0E8F0" } }, right: { style: "hair", color: { argb: "FFE0E8F0" } } };
+        });
+      });
+      // 合计行
+      if (rows.length > 0) {
+        const sumRow = ws.addRow(["合计", "", "", "", "",
+          totals.die_attach, totals.wire_bond, totals.molding,
+          totals.testing, totals.test_done, totals.total_wip, "",
+        ]);
+        sumRow.height = 20;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sumRow.eachCell((cell: any) => {
+          cell.font = { bold: true, size: 10, name: "微软雅黑" };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF5" } };
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+          cell.border = { top: { style: "thin", color: { argb: "FF1E3A5F" } }, bottom: { style: "thin", color: { argb: "FF1E3A5F" } }, left: { style: "thin", color: { argb: "FFB8C8E0" } }, right: { style: "thin", color: { argb: "FFB8C8E0" } } };
+        });
+      }
+
+      [18, 16, 20, 18, 14, 10, 10, 10, 10, 10, 14, 18].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+      ws.views = [{ state: "frozen", ySplit: 2 }];
+
+      const nameParts = ["封装厂在制品明细表", today];
+      if (vendorName) nameParts.push(vendorName);
+      else if (labelName) nameParts.push(labelName);
+      const filename = encodeURIComponent(`${nameParts.join("_")}.xlsx`);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${filename}`);
+      await wb.xlsx.write(res);
+      res.end();
+    } catch (err) {
+      console.error("[Export] pkg-wip-inproc-detail error:", err);
       if (!res.headersSent) res.status(500).json({ error: "导出失败，请重试" });
     }
   });

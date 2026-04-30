@@ -142,15 +142,34 @@ INSERT IGNORE INTO `report_modules`
   (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
 VALUES (
   'pkg_wip_detail',
-  '封装厂WIP明细表',
+  '原封装厂WIP明细表',
   '生产报表',
-  '按日期查询封装厂WIP明细数据',
+  '按日期查询封装厂WIP明细数据（来源：v_dwd_ab_wip）',
   '/reports/pkg-wip-detail',
   'List',
   1,
   'active',
   30
 );
+
+INSERT IGNORE INTO `report_modules`
+  (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
+VALUES (
+  'pkg_wip_inproc_detail',
+  '封装厂在制品明细表',
+  '生产报表',
+  '封装厂在制品当前快照明细（来源：v_dws_ab_wip，带进度更新时间）',
+  '/reports/pkg-wip-inproc-detail',
+  'List',
+  1,
+  'active',
+  40
+);
+
+-- 兼容升级：若旧模块名称仍为“封装厂WIP明细表”，重命名为“原封装厂WIP明细表”
+UPDATE `report_modules`
+  SET `name` = '原封装厂WIP明细表'
+  WHERE `code` = 'pkg_wip_detail' AND `name` = '封装厂WIP明细表';
 
 -- ─── 完成提示 ──────────────────────────────────────────────────────────────────────────────
 SELECT '✅ 数据库初始化完成！请使用 node scripts/create-admin.mjs 创建管理员账号。' AS message;
