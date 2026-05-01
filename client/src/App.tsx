@@ -7,10 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import PkgWipSummary from "./pages/PkgWipSummary";
-import OutsourceOrderDetail from "./pages/OutsourceOrderDetail";
-import PkgWipDetail from "./pages/PkgWipDetail";
-import PkgWipInprocDetail from "./pages/PkgWipInprocDetail";
+import { REPORT_ROUTES } from "./reports";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminPermissions from "./pages/admin/AdminPermissions";
 import AdminReportModules from "./pages/admin/AdminReportModules";
@@ -33,10 +30,9 @@ function Router() {
     <DashboardLayout>
       <Switch>
         <Route path="/" component={Home} />
-        <Route path="/reports/pkg-wip-summary" component={PkgWipSummary} />
-        <Route path="/reports/outsource-order-detail" component={OutsourceOrderDetail} />
-        <Route path="/reports/pkg-wip-detail" component={PkgWipDetail} />
-        <Route path="/reports/pkg-wip-inproc-detail" component={PkgWipInprocDetail} />
+        {REPORT_ROUTES.map(({ path, component }) => (
+          <Route key={path} path={path} component={component} />
+        ))}
         <Route path="/admin/users" component={AdminUsers} />
         <Route path="/admin/permissions" component={AdminPermissions} />
         <Route path="/admin/report-modules" component={AdminReportModules} />

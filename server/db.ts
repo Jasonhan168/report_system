@@ -5,6 +5,7 @@ import {
   InsertUser, InsertDatasource, InsertReportModule, InsertReportPermission, InsertSystemConfig,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { ALL_REPORTS } from "./reports/_registry";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -272,59 +273,24 @@ export async function initDefaultData() {
     });
   }
 
-  // 默认报表模块
-  const defaultModules = [
-    {
-      code: "pkg_wip_summary",
-      name: "封装厂WIP汇总表",
-      category: "封装厂报表",
-      description: "展示封装厂各工序在制品（WIP）汇总数据，支持按日期、标签品名、供应商查询",
-      route: "/reports/pkg-wip-summary",
-      isActive: true,
-      sortOrder: 1,
-    },
-    {
-      code: "outsource_order_detail",
-      name: "委外订单明细表",
-      category: "生产报表",
-      description: "按日期查询委外订单明细，received_rate<98为固定条件",
-      route: "/reports/outsource-order-detail",
-      isActive: true,
-      sortOrder: 20,
-    },
-    {
-      code: "pkg_wip_detail",
-      name: "原封装厂WIP明细表",
-      category: "生产报表",
-      description: "按日期查询封装厂WIP明细数据（来源：v_dwd_ab_wip）",
-      route: "/reports/pkg-wip-detail",
-      isActive: true,
-      sortOrder: 30,
-    },
-    {
-      code: "pkg_wip_inproc_detail",
-      name: "封装厂在制品明细表",
-      category: "生产报表",
-      description: "封装厂在制品当前快照明细（来源：v_dws_ab_wip，带进度更新时间）",
-      route: "/reports/pkg-wip-inproc-detail",
-      isActive: true,
-      sortOrder: 40,
-    },
-  ];
+  // 默认报表模块 —— 由 ALL_REPORTS 自动生成；每次启动都会同步元数据
+  // （name/category/description/route/icon/sortOrder），但保留 datasourceId 与 isActive
+  // 由管理员在后台配置。
   const existingModules = await getAllReportModules();
-  const existingCodes = new Set(existingModules.map((m) => m.code));
-  for (const mod of defaultModules) {
-    if (!existingCodes.has(mod.code)) {
-      await db.insert(reportModules).values(mod);
+  const existingMap = new Map(existingModules.map((m) => [m.code, m]));
+  for (const plugin of ALL_REPORTS) {
+    const { code, name, category, description, route, sortOrder } = plugin.meta;
+    if (!existingMap.has(code)) {
+      await db.insert(reportModules).values({
+        code, name, category, description, route, sortOrder, isActive: true,
+      });
+    } else {
+      await db.update(reportModules)
+        .set({ name, category, description, route, sortOrder })
+        .where(eq(reportModules.code, code))
+        .catch(() => {});
     }
   }
-
-  // 兼容老数据：若旧封装厂WIP明细表名称未更新，则重命名为“原封装厂WIP明细表”
-  await db
-    .update(reportModules)
-    .set({ name: "原封装厂WIP明细表" })
-    .where(and(eq(reportModules.code, "pkg_wip_detail"), eq(reportModules.name, "封装厂WIP明细表")))
-    .catch(() => {});
 
   // 默认系统配置
   const defaultConfigs = [

@@ -110,66 +110,9 @@ INSERT IGNORE INTO `datasources` (`name`, `type`, `host`, `port`, `database`, `i
   ('演示数据源（Mock）', 'mock', 'localhost', 0, 'mock', 1, 1, 'active');
 
 -- ─── 初始报表模块 ──────────────────────────────────────────────────────────────
-INSERT IGNORE INTO `report_modules`
-  (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
-VALUES (
-  'pkg_wip_summary',
-  '封装厂WIP汇总表',
-  '封装厂报表',
-  '展示封装厂各工序在制品（WIP）汇总数据，支持按日期、标签品名、供应商查询',
-  '/reports/pkg-wip-summary',
-  'BarChart2',
-  1,
-  'active',
-  1
-);
-
-INSERT IGNORE INTO `report_modules`
-  (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
-VALUES (
-  'outsource_order_detail',
-  '委外订单明细表',
-  '生产报表',
-  '按日期查询委外订单明细，received_rate<98为固定条件',
-  '/reports/outsource-order-detail',
-  'FileText',
-  1,
-  'active',
-  20
-);
-
-INSERT IGNORE INTO `report_modules`
-  (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
-VALUES (
-  'pkg_wip_detail',
-  '原封装厂WIP明细表',
-  '生产报表',
-  '按日期查询封装厂WIP明细数据（来源：v_dwd_ab_wip）',
-  '/reports/pkg-wip-detail',
-  'List',
-  1,
-  'active',
-  30
-);
-
-INSERT IGNORE INTO `report_modules`
-  (`code`, `name`, `category`, `description`, `route`, `icon`, `isActive`, `status`, `sortOrder`)
-VALUES (
-  'pkg_wip_inproc_detail',
-  '封装厂在制品明细表',
-  '生产报表',
-  '封装厂在制品当前快照明细（来源：v_dws_ab_wip，带进度更新时间）',
-  '/reports/pkg-wip-inproc-detail',
-  'List',
-  1,
-  'active',
-  40
-);
-
--- 兼容升级：若旧模块名称仍为“封装厂WIP明细表”，重命名为“原封装厂WIP明细表”
-UPDATE `report_modules`
-  SET `name` = '原封装厂WIP明细表'
-  WHERE `code` = 'pkg_wip_detail' AND `name` = '封装厂WIP明细表';
+-- 注意：报表模块默认记录由后端启动时的 initDefaultData() 根据 ALL_REPORTS 插件列表
+--       自动 upsert（包含 name/category/description/route/icon/sortOrder）。
+--       本脚本仅创建空表结构；无需在此维护报表列表。
 
 -- ─── 完成提示 ──────────────────────────────────────────────────────────────────────────────
 SELECT '✅ 数据库初始化完成！请使用 node scripts/create-admin.mjs 创建管理员账号。' AS message;
