@@ -19,6 +19,7 @@ import {
   outsourceOrderDetail,
   pkgWipDetail,
   pkgWipInprocDetail,
+  pkgWipInprocSummary,
 } from "./reports/_registry";
 import { authenticate, hashPassword, verifyPassword } from "./auth";
 import { sdk } from "./_core/sdk";
@@ -294,7 +295,7 @@ export const appRouter = router({
         category: z.string().optional(),
         description: z.string().optional(),
         route: z.string().optional(),
-        datasourceId: z.number().optional(),
+        datasourceId: z.number().nullable().optional(),
         isActive: z.boolean().optional(),
         sortOrder: z.number().optional(),
       }))
@@ -366,6 +367,7 @@ export const appRouter = router({
   outsourceOrderDetail: makeReportRouter(outsourceOrderDetail),
   pkgWipDetail:         makeReportRouter(pkgWipDetail),
   pkgWipInprocDetail:   makeReportRouter(pkgWipInprocDetail),
+  pkgWipInprocSummary:  makeReportRouter(pkgWipInprocSummary),
 });
 
 export type AppRouter = typeof appRouter;

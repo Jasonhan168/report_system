@@ -10,6 +10,7 @@ import PkgWipSummary from "@/pages/PkgWipSummary";
 import OutsourceOrderDetail from "@/pages/OutsourceOrderDetail";
 import PkgWipDetail from "@/pages/PkgWipDetail";
 import PkgWipInprocDetail from "@/pages/PkgWipInprocDetail";
+import PkgWipInprocSummary from "@/pages/PkgWipInprocSummary";
 
 export interface ReportRoute {
   path: string;
@@ -18,8 +19,9 @@ export interface ReportRoute {
 }
 
 export const REPORT_ROUTES: ReportRoute[] = [
-  { path: "/reports/pkg-wip-summary",        component: PkgWipSummary },
-  { path: "/reports/outsource-order-detail", component: OutsourceOrderDetail },
-  { path: "/reports/pkg-wip-detail",         component: PkgWipDetail },
-  { path: "/reports/pkg-wip-inproc-detail",  component: PkgWipInprocDetail },
+  { path: "/reports/pkg-wip-summary",         component: PkgWipSummary },
+  { path: "/reports/outsource-order-detail",  component: OutsourceOrderDetail },
+  { path: "/reports/pkg-wip-detail",          component: PkgWipDetail },
+  { path: "/reports/pkg-wip-inproc-detail",   component: PkgWipInprocDetail },
+  { path: "/reports/pkg-wip-inproc-summary",  component: PkgWipInprocSummary },
 ];

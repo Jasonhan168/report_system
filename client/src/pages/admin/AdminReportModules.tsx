@@ -6,11 +6,14 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { FileText, RefreshCw, Pencil } from "lucide-react";
+import { FileText, RefreshCw, Pencil, Database } from "lucide-react";
 
 type Module = {
   id: number;
@@ -24,15 +27,33 @@ type Module = {
   datasourceId?: number | null;
 };
 
+// 未绑定数据源的 Select 占位值（Radix Select 不允许空字符串）
+const DS_NONE = "__none__";
+
 export default function AdminReportModules() {
   const { data: modules, isLoading, refetch } = trpc.reportModules.listAll.useQuery();
+  const { data: datasources } = trpc.datasources.list.useQuery();
   const update = trpc.reportModules.update.useMutation({
     onSuccess: () => { toast.success("已更新"); refetch(); setEditing(null); },
     onError: (e) => toast.error(e.message),
   });
 
   const [editing, setEditing] = useState<Module | null>(null);
-  const [form, setForm] = useState({ name: "", category: "", description: "", route: "", sortOrder: 0 });
+  const [form, setForm] = useState({
+    name: "",
+    category: "",
+    description: "",
+    route: "",
+    sortOrder: 0,
+    datasourceId: null as number | null,
+  });
+
+  /** 通过 id 查找数据源名称，用于表格展示 */
+  const dsName = (id?: number | null) => {
+    if (id == null) return null;
+    const ds = datasources?.find((d) => d.id === id);
+    return ds ? `${ds.name}（${ds.type}）` : `#${id}`;
+  };
 
   function openEdit(m: Module) {
     setForm({
@@ -41,6 +62,7 @@ export default function AdminReportModules() {
       description: m.description || "",
       route: m.route || "",
       sortOrder: m.sortOrder,
+      datasourceId: m.datasourceId ?? null,
     });
     setEditing(m);
   }
@@ -54,6 +76,8 @@ export default function AdminReportModules() {
       description: form.description || undefined,
       route: form.route || undefined,
       sortOrder: form.sortOrder,
+      // null 表示解绑数据源，undefined 表示不修改
+      datasourceId: form.datasourceId,
     });
   }
 
@@ -62,7 +86,7 @@ export default function AdminReportModules() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">报表模块管理</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">管理系统中的报表模块及其状态和路由配置</p>
+          <p className="text-xs text-muted-foreground mt-0.5">管理系统中的报表模块及其状态、路由与数据源绑定</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5">
           <RefreshCw size={13} />刷新
@@ -73,7 +97,7 @@ export default function AdminReportModules() {
         <Table>
           <TableHeader>
             <TableRow className="bg-secondary/50 hover:bg-secondary/50">
-              {["模块代码", "模块名称", "分类", "路由地址", "排序", "状态", "操作"].map(h => (
+              {["模块代码", "模块名称", "分类", "路由地址", "数据源", "排序", "状态", "操作"].map(h => (
                 <TableHead key={h} className="text-xs font-semibold px-4">{h}</TableHead>
               ))}
             </TableRow>
@@ -82,12 +106,14 @@ export default function AdminReportModules() {
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <TableCell key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
-            ) : modules?.map((m) => (
+            ) : modules?.map((m) => {
+              const name = dsName(m.datasourceId);
+              return (
               <TableRow key={m.id}>
                 <TableCell className="px-4 py-3 font-mono text-xs text-muted-foreground">{m.code}</TableCell>
                 <TableCell className="px-4 py-3 font-medium text-sm">{m.name}</TableCell>
@@ -97,6 +123,13 @@ export default function AdminReportModules() {
                     <span className="text-primary">{m.route}</span>
                   ) : (
                     <span className="text-muted-foreground italic">未配置</span>
+                  )}
+                </TableCell>
+                <TableCell className="px-4 py-3 text-xs">
+                  {name ? (
+                    <span className="inline-flex items-center gap-1"><Database size={11} className="text-muted-foreground" />{name}</span>
+                  ) : (
+                    <span className="text-muted-foreground italic">未绑定</span>
                   )}
                 </TableCell>
                 <TableCell className="px-4 py-3 text-xs">{m.sortOrder}</TableCell>
@@ -118,7 +151,8 @@ export default function AdminReportModules() {
                   </Button>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -167,6 +201,32 @@ export default function AdminReportModules() {
               <p className="text-xs text-muted-foreground">
                 留空则首页卡片显示"暂未配置路由"，填写后用户点击即可跳转对应报表页面
               </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                数据源
+                <span className="text-muted-foreground font-normal ml-1 text-xs">（决定报表查询走哪个真实数据库；未绑定时走 Mock 或返回空）</span>
+              </Label>
+              <Select
+                value={form.datasourceId == null ? DS_NONE : String(form.datasourceId)}
+                onValueChange={(v) => setForm(f => ({
+                  ...f,
+                  datasourceId: v === DS_NONE ? null : Number(v),
+                }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择数据源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DS_NONE}>未绑定</SelectItem>
+                  {datasources?.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}（{d.type}）{d.isDefault ? "  · 默认" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

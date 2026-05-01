@@ -16,6 +16,7 @@ import pkgWipSummary from "./pkg-wip-summary";
 import outsourceOrderDetail from "./outsource-order-detail";
 import pkgWipDetail from "./pkg-wip-detail";
 import pkgWipInprocDetail from "./pkg-wip-inproc-detail";
+import pkgWipInprocSummary from "./pkg-wip-inproc-summary";
 
 /** 所有报表插件（顺序无意义，展示排序由 meta.sortOrder 决定） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +25,7 @@ export const ALL_REPORTS: ReportPlugin<any, any, any, any, any, any>[] = [
   outsourceOrderDetail,
   pkgWipDetail,
   pkgWipInprocDetail,
+  pkgWipInprocSummary,
 ];
 
-export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail };
+export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail, pkgWipInprocSummary };
