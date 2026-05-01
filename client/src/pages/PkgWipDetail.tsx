@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,6 +68,10 @@ export default function PkgWipDetail() {
     { enabled: !!permission?.allowed }
   );
 
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
+
   // 服务端已过滤合计WIP=0，total 直接使用服务端返回值
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
@@ -125,7 +130,7 @@ export default function PkgWipDetail() {
   const COL_COUNT = 12;
 
   return (
-    <div className="flex flex-col h-full gap-3 p-4">
+    <div ref={tableRef} className="flex flex-col h-full gap-3 p-4 report-page">
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

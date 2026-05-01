@@ -1,5 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,12 +182,19 @@ function highlightMatch(text: string, keyword: string) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default function PkgWipInprocSummary() {
-  const [labelName, setLabelName] = useState("");
-  const [vendorName, setVendorName] = useState("");
+  const [, navigate] = useLocation();
+
+  // 从 URL 读取返回时恢复的筛选条件（明细表点击“返回汇总表”时携带）
+  const initParams = new URLSearchParams(window.location.search);
+  const initLabelName = initParams.get("summaryLabelName") || "";
+  const initVendorName = initParams.get("summaryVendorName") || "";
+
+  const [labelName, setLabelName] = useState(initLabelName);
+  const [vendorName, setVendorName] = useState(initVendorName);
   const [pageSize, setPageSize] = useState(20);
 
   const [queryParams, setQueryParams] = useState({
-    labelName: "", vendorName: "", page: 1, pageSize: 20,
+    labelName: initLabelName, vendorName: initVendorName, page: 1, pageSize: 20,
   });
 
   const { data: viewPerm } = trpc.pkgWipInprocSummary.checkPermission.useQuery({ type: "view" });
@@ -200,6 +209,10 @@ export default function PkgWipInprocSummary() {
     queryParams,
     { enabled: !!viewPerm?.allowed }
   );
+
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
 
   const handleSearch = useCallback(() => {
     setQueryParams({ labelName, vendorName, page: 1, pageSize });
@@ -267,11 +280,12 @@ export default function PkgWipInprocSummary() {
     );
   }
 
-  const COL_COUNT = 10;
-  const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "装片", "焊线", "塑封", "测试", "测试后", "更新时间"];
+  const COL_COUNT = 11;
+  const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
+  const TODAY = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="p-6">
+    <div ref={tableRef} className="p-6 report-page">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-foreground">封装厂在制品汇总表</h1>
@@ -376,7 +390,7 @@ export default function PkgWipInprocSummary() {
                     key={h}
                     className={cn(
                       "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3",
-                      i >= 3 && i <= 8 && "text-right"
+                      i >= 3 && i <= 9 && "text-right"
                     )}
                   >
                     {h}
@@ -406,20 +420,65 @@ export default function PkgWipInprocSummary() {
                 </TableRow>
               ) : (
                 <>
-                  {data?.data.map((row, idx) => (
+                  {data?.data.map((row, idx) => {
+                    const rowAny = row as typeof row & { wip_qty?: number; order_nos?: string[] };
+                    // 返回汇总表时恢复筛选用的参数
+                    const summaryBack = {
+                      ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
+                      ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
+                    };
+                    // 跳转封装厂在制品明细表（点击在制品总数）
+                    // 注：汇总表已按 vendor_part_no + vendor_name 分组，label_name 为拼接值
+                    //       传给明细表做 LIKE 过滤会导致无匹配，故不传 labelName
+                    const inprocDetailParams = new URLSearchParams({
+                      ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
+                      ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      backRoute: "/reports/pkg-wip-inproc-summary",
+                      ...summaryBack,
+                    }).toString();
+                    // 跳转委外订单明细表（点击未回货数量）
+                    const outsourceBase = new URLSearchParams({
+                      date: TODAY,
+                      ...(row.label_name ? { labelName: row.label_name } : {}),
+                      ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
+                      ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      backRoute: "/reports/pkg-wip-inproc-summary",
+                      ...summaryBack,
+                    });
+                    if (rowAny.order_nos && rowAny.order_nos.length > 0) {
+                      rowAny.order_nos.forEach((no) => outsourceBase.append("orderNos", no));
+                    }
+                    const outsourceParams = outsourceBase.toString();
+                    return (
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.unissued_qty)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {row.unissued_qty !== 0 ? (
+                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${outsourceParams}`)}>
+                            {fmtCell(row.unissued_qty)}
+                          </button>
+                        ) : ""}
+                      </TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.die_attach)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.wire_bond)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.molding)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.testing)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs font-semibold">
+                        {rowAny.wip_qty && rowAny.wip_qty !== 0 ? (
+                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => navigate(`/reports/pkg-wip-inproc-detail?${inprocDetailParams}`)}>
+                            {fmtCell(rowAny.wip_qty)}
+                          </button>
+                        ) : ""}
+                      </TableCell>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(row.update_time)}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                   {data?.totalRow && (
                     <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
                       <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={3}>合计</TableCell>
@@ -429,6 +488,7 @@ export default function PkgWipInprocSummary() {
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.molding)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.testing)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.test_done)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold text-primary">{fmtCell((data.totalRow as typeof data.totalRow & { wip_qty?: number }).wip_qty ?? 0)}</TableCell>
                       <TableCell />
                     </TableRow>
                   )}

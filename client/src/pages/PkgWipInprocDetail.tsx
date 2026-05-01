@@ -1,10 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
+import { useSearch, useLocation } from "wouter";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 
 function fmt(v: number | string | null | undefined): string {
@@ -20,11 +23,24 @@ function fmtTotal(v: number): string {
 }
 
 export default function PkgWipInprocDetail() {
-  const [vendorName, setVendorName] = useState("");
-  const [labelName, setLabelName] = useState("");
-  const [vendorPartNo, setVendorPartNo] = useState("");
+  const search = useSearch();
+  const sp = new URLSearchParams(search);
+  const [, navigate] = useLocation();
+
+  // 汇总表跳转过来的标识 + 返回路由 + 要恢复的筛选
+  const fromSummary = sp.get("fromSummary") === "1";
+  const backRoute = sp.get("backRoute") || "/reports/pkg-wip-inproc-summary";
+  const summaryLabelName = sp.get("summaryLabelName") ?? "";
+  const summaryVendorName = sp.get("summaryVendorName") ?? "";
+
+  const [vendorName, setVendorName] = useState(sp.get("vendorName") ?? "");
+  const [labelName, setLabelName] = useState(sp.get("labelName") ?? "");
+  const [vendorPartNo, setVendorPartNo] = useState(sp.get("vendorPartNo") ?? "");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+
+  // 从汇总表跳转时默认冻结筛选条件
+  const [filterLocked, setFilterLocked] = useState(fromSummary);
 
   const queryParams = useMemo(() => ({
     vendorName: vendorName || undefined,
@@ -44,6 +60,10 @@ export default function PkgWipInprocDetail() {
     queryParams,
     { enabled: !!permission?.allowed }
   );
+
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
 
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
@@ -100,13 +120,45 @@ export default function PkgWipInprocDetail() {
   const COL_COUNT = 12;
 
   return (
-    <div className="flex flex-col h-full gap-3 p-4">
+    <div ref={tableRef} className="flex flex-col h-full gap-3 p-4 report-page">
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">封装厂在制品明细表</h1>
+          {fromSummary && (
+            <Badge className="bg-blue-100 text-blue-700 border-blue-300 gap-1 px-2 py-0.5 text-xs font-medium">
+              <Filter size={11} />
+              来自汇总表筛选
+            </Badge>
+          )}
+          {fromSummary && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              onClick={() => {
+                const backParams = new URLSearchParams();
+                if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
+                if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                const qs = backParams.toString();
+                navigate(`${backRoute}${qs ? `?${qs}` : ""}`);
+              }}
+            >
+              ← 返回汇总表
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
+          {fromSummary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterLocked(v => !v)}
+              className={filterLocked ? "border-blue-400 text-blue-600 bg-blue-50 hover:bg-blue-100" : ""}
+            >
+              {filterLocked ? "解锁筛选" : "锁定筛选"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-1" /> 刷新
           </Button>
@@ -120,14 +172,15 @@ export default function PkgWipInprocDetail() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3">
+      <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">委外厂商</span>
           <Select
             value={vendorName || "__all__"}
-            onValueChange={v => { setVendorName(v === "__all__" ? "" : v); setPage(1); }}
+            onValueChange={v => { if (!filterLocked) { setVendorName(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked}
           >
-            <SelectTrigger className="w-40 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
+            <SelectTrigger className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">全部</SelectItem>
               {filterOptions?.vendorNames?.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
@@ -138,18 +191,20 @@ export default function PkgWipInprocDetail() {
           <span className="text-xs text-muted-foreground">标签品名</span>
           <Input
             value={labelName}
-            onChange={e => { setLabelName(e.target.value); setPage(1); }}
+            onChange={e => { if (!filterLocked) { setLabelName(e.target.value); setPage(1); } }}
             placeholder="搜索..."
-            className="w-40 h-8"
+            className={`w-40 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
           />
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">供应商料号</span>
           <Input
             value={vendorPartNo}
-            onChange={e => { setVendorPartNo(e.target.value); setPage(1); }}
+            onChange={e => { if (!filterLocked) { setVendorPartNo(e.target.value); setPage(1); } }}
             placeholder="搜索..."
-            className="w-36 h-8"
+            className={`w-36 h-8 ${filterLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+            readOnly={filterLocked}
           />
         </div>
         <Button size="sm" className="h-8 mt-4" onClick={() => { setPage(1); refetch(); }}>

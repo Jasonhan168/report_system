@@ -182,3 +182,15 @@
     }
   }
 }
+
+/*
+ * 报表页面统一样式：单元格最多显示 30 个字符宽度，超出省略号，
+ * 悬停时由 useAutoTitles hook 自动注入 title 属性显示完整内容。
+ */
+.report-page td,
+.report-page th {
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

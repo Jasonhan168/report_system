@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -65,6 +66,8 @@ export default function OutsourceOrderDetail() {
   const summaryDate = sp.get("summaryDate") ?? "";
   const summaryLabelName = sp.get("summaryLabelName") ?? "";
   const summaryVendorName = sp.get("summaryVendorName") ?? "";
+  // 返回时的目标汇总表路径（默认回封装厂WIP汇总表，可被汇总表覆盖为在制品汇总表等）
+  const backRoute = sp.get("backRoute") || "/reports/pkg-wip-summary";
 
   // 从 URL 解析 orderNos（多值参数）
   const orderNos = useMemo(() => sp.getAll("orderNos"), [search]);
@@ -105,6 +108,10 @@ export default function OutsourceOrderDetail() {
     queryParams,
     { enabled: !!permission?.allowed }
   );
+
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
 
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
@@ -161,7 +168,7 @@ export default function OutsourceOrderDetail() {
   );
 
   return (
-    <div className="flex flex-col h-full gap-3 p-4">
+    <div ref={tableRef} className="flex flex-col h-full gap-3 p-4 report-page">
       {/* 标题栏 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -185,7 +192,7 @@ export default function OutsourceOrderDetail() {
                 if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
                 if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
                 const qs = backParams.toString();
-                navigate(`/reports/pkg-wip-summary${qs ? `?${qs}` : ""}`);
+                navigate(`${backRoute}${qs ? `?${qs}` : ""}`);
               }}
             >
               ← 返回汇总表

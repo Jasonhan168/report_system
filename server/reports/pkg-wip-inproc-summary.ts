@@ -23,7 +23,11 @@ interface Row {
   molding: number;
   testing: number;
   test_done: number;
+  /** 在制品总数 = 装片 + 焊线 + 塑封 + 测试 + 测试后 */
+  wip_qty: number;
   update_time: string;
+  /** 该组汇总的所有委外订单号（用于跳转委外订单明细表的 orderNos 列表） */
+  order_nos?: string[];
 }
 
 interface Input {
@@ -67,9 +71,10 @@ function fmtDate(v: string | null | undefined): string {
 /** 内层查询：单行粒度（订单 × 供应商料号），已做 NULL 安全化 */
 const INNER_SQL = `
 SELECT
-    ifNull(ord.label, '') AS label_name,
+    ord.order_no               AS order_no,
+    ifNull(ord.label, '')          AS label_name,
     ifNull(ord.vendor_part_no, '') AS vendor_part_no,
-    ifNull(ord.vendor_name, '') AS vendor_name,
+    ifNull(ord.vendor_name, '')    AS vendor_name,
     (ifNull(ord.open_qty, 0)
      - ifNull(wip.die_attach, 0)
      - ifNull(wip.wire_bond, 0)
@@ -81,6 +86,11 @@ SELECT
     ifNull(wip.molding, 0)    AS molding,
     ifNull(wip.testing, 0)    AS testing,
     ifNull(wip.test_done, 0)  AS test_done,
+    (ifNull(wip.die_attach, 0)
+     + ifNull(wip.wire_bond, 0)
+     + ifNull(wip.molding, 0)
+     + ifNull(wip.testing, 0)
+     + ifNull(wip.test_done, 0)) AS wip_qty,
     wip.update_time           AS update_time
 FROM v_dwd_order_agg AS ord
 LEFT JOIN v_dws_ab_wip_agg AS wip
@@ -96,6 +106,12 @@ function buildWhere(p: Input): string {
 }
 
 function toRow(r: Record<string, unknown>): Row {
+  let order_nos: string[] = [];
+  const raw = r.order_nos;
+  if (Array.isArray(raw)) order_nos = raw.map(String);
+  else if (typeof raw === "string" && raw.startsWith("[")) {
+    try { order_nos = JSON.parse(raw); } catch { order_nos = []; }
+  }
   return {
     label_name: String(r.label_name ?? ""),
     vendor_part_no: String(r.vendor_part_no ?? ""),
@@ -106,7 +122,9 @@ function toRow(r: Record<string, unknown>): Row {
     molding: Number(r.molding ?? 0),
     testing: Number(r.testing ?? 0),
     test_done: Number(r.test_done ?? 0),
+    wip_qty: Number(r.wip_qty ?? 0),
     update_time: String(r.update_time ?? ""),
+    order_nos,
   };
 }
 
@@ -119,26 +137,29 @@ async function queryData(client: ClickHouseClient, input: Input): Promise<QueryR
   const countSql = `
 SELECT count() AS cnt
 FROM (
-  SELECT label_name, vendor_part_no, vendor_name
+  SELECT vendor_part_no, vendor_name
   FROM (${INNER_SQL})
   WHERE ${where}
-  GROUP BY label_name, vendor_part_no, vendor_name
+  GROUP BY vendor_part_no, vendor_name
 )`;
 
   const dataSql = `
 SELECT
-    label_name, vendor_part_no, vendor_name,
+    arrayStringConcat(groupUniqArray(label_name), ',') AS label_name,
+    vendor_part_no, vendor_name,
     sum(unissued_qty) AS unissued_qty,
     sum(die_attach)   AS die_attach,
     sum(wire_bond)    AS wire_bond,
     sum(molding)      AS molding,
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
+    sum(wip_qty)      AS wip_qty,
+    groupUniqArray(order_no) AS order_nos,
     toString(max(update_time)) AS update_time
 FROM (${INNER_SQL})
 WHERE ${where}
-GROUP BY label_name, vendor_part_no, vendor_name
-ORDER BY label_name, vendor_name
+GROUP BY vendor_part_no, vendor_name
+ORDER BY vendor_name, vendor_part_no
 LIMIT ${pageSize} OFFSET ${offset}`;
 
   const totalSql = `
@@ -149,6 +170,7 @@ SELECT
     sum(molding)      AS molding,
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
+    sum(wip_qty)      AS wip_qty,
     toString(max(update_time)) AS update_time
 FROM (${INNER_SQL})
 WHERE ${where}`;
@@ -172,6 +194,7 @@ WHERE ${where}`;
     molding: Number(t.molding ?? 0),
     testing: Number(t.testing ?? 0),
     test_done: Number(t.test_done ?? 0),
+    wip_qty: Number(t.wip_qty ?? 0),
     update_time: String(t.update_time ?? ""),
   };
   return { rows, data: rows, total, totalRow };
@@ -249,6 +272,7 @@ const plugin: ReportPlugin<
       molding: 0,
       testing: 0,
       test_done: 0,
+      wip_qty: 0,
       update_time: "",
     },
   },
@@ -283,6 +307,8 @@ const plugin: ReportPlugin<
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.testing) || 0), 0) },
       { header: "测试后",     width: 12, value: (r) => r.test_done,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.test_done) || 0), 0) },
+      { header: "在制品总数", width: 14, value: (r) => r.wip_qty,
+        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.wip_qty) || 0), 0) },
       { header: "更新时间",   width: 14, value: (r) => fmtDate(r.update_time) },
     ],
   },

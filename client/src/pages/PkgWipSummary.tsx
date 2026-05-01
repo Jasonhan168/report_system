@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -221,6 +222,10 @@ export default function PkgWipSummary() {
     { enabled: !!viewPerm?.allowed }
   );
 
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
+
   // 导出功能改为调用服务端接口，避免在浏览器端加载 exceljs
 
   const handleSearch = useCallback(() => {
@@ -291,7 +296,7 @@ export default function PkgWipSummary() {
   }
 
   return (
-    <div className="p-6">
+    <div ref={tableRef} className="p-6 report-page">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-foreground">封装厂WIP汇总表</h1>
