@@ -10,7 +10,7 @@ import {
   getAllReportModules, getReportModuleByCode, createReportModule, updateReportModule,
   getPermissionsByUserId, getPermissionsByReportId, upsertReportPermission,
   getAllPermissionsWithUsers, getAllSystemConfigs, upsertSystemConfig,
-  initDefaultData,
+  initDefaultData, listOperationLogs,
 } from "./db";
 import { testClickHouseConnection, invalidateClickHouseClient } from "./datasource";
 import { makeReportRouter } from "./reports/_makeRouter";
@@ -20,8 +20,10 @@ import {
   pkgWipDetail,
   pkgWipInprocDetail,
   pkgWipInprocSummary,
+  ALL_REPORTS,
 } from "./reports/_registry";
 import { authenticate, hashPassword, verifyPassword } from "./auth";
+import { logOperation } from "./_core/operationLog";
 import { sdk } from "./_core/sdk";
 import { ENV } from "./_core/env";
 
@@ -62,10 +64,22 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "当前系统使用OAuth登录" });
         }
 
+        const start = Date.now();
         let authResult;
         try {
           authResult = await authenticate(input.username, input.password);
         } catch (err: any) {
+          // 记录登录失败日志
+          logOperation({
+            user: { openId: input.username, name: input.username },
+            action: "login_failed",
+            resourceType: "auth",
+            params: { username: input.username },
+            req: ctx.req,
+            success: false,
+            errorMsg: err?.message || "登录失败",
+            durationMs: Date.now() - start,
+          }).catch(() => {});
           throw new TRPCError({ code: "UNAUTHORIZED", message: err.message || "登录失败" });
         }
 
@@ -92,6 +106,17 @@ export const appRouter = router({
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
         const user = await getUserByOpenId(authResult.openId);
+
+        // 记录登录成功日志
+        logOperation({
+          user: user ? { id: user.id, openId: user.openId, name: user.name } : null,
+          action: "login",
+          resourceType: "auth",
+          params: { loginMethod: authResult.loginMethod },
+          req: ctx.req,
+          durationMs: Date.now() - start,
+        }).catch(() => {});
+
         return { success: true, user };
       }),
 
@@ -99,6 +124,14 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      // 记录登出日志（即使未登录也尝试记录，帮助排查异常）
+      const u = ctx.user;
+      logOperation({
+        user: u ? { id: u.id, openId: u.openId, name: u.name } : null,
+        action: "logout",
+        resourceType: "auth",
+        req: ctx.req,
+      }).catch(() => {});
       return { success: true } as const;
     }),
 
@@ -358,6 +391,49 @@ export const appRouter = router({
       })))
       .mutation(async ({ input }) => {
         for (const config of input) await upsertSystemConfig(config);
+        return { success: true };
+      }),
+  }),
+
+  // ─── 操作日志 ───────────────────────────────────────────────────────────────────
+  operationLogs: router({
+    // 管理员：分页查询操作日志
+    list: adminProcedure
+      .input(z.object({
+        action: z.string().optional(),
+        userId: z.number().optional(),
+        resourceCode: z.string().optional(),
+        keyword: z.string().optional(),
+        startTime: z.coerce.date().optional(),
+        endTime: z.coerce.date().optional(),
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(200).default(20),
+      }))
+      .query(async ({ input }) => listOperationLogs(input)),
+
+    // 前端主动写入日志（用于下钻等客户端行为）
+    logClient: protectedProcedure
+      .input(z.object({
+        action: z.enum(["drill_down", "view"]),
+        resourceCode: z.string().min(1),
+        resourceName: z.string().optional(),
+        params: z.record(z.string(), z.any()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // 验证 resourceCode 合法性，避免写入任意内容
+        const plugin = ALL_REPORTS.find((p) => p.meta.code === input.resourceCode);
+        if (!plugin) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "未知的报表编码" });
+        }
+        await logOperation({
+          user: ctx.user,
+          action: input.action,
+          resourceType: "report",
+          resourceCode: plugin.meta.code,
+          resourceName: input.resourceName || plugin.meta.name,
+          params: input.params ?? null,
+          req: ctx.req,
+        });
         return { success: true };
       }),
   }),

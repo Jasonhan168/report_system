@@ -95,6 +95,29 @@ CREATE TABLE IF NOT EXISTS `system_configs` (
   CONSTRAINT `system_configs_key_unique` UNIQUE (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ─── 用户操作日志表 ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `operation_logs` (
+  `id`           INT AUTO_INCREMENT NOT NULL,
+  `userId`       INT,
+  `userOpenId`   VARCHAR(64),
+  `userName`     VARCHAR(128),
+  `action`       VARCHAR(32) NOT NULL,
+  `resourceType` VARCHAR(32),
+  `resourceCode` VARCHAR(64),
+  `resourceName` VARCHAR(128),
+  `params`       JSON,
+  `ip`           VARCHAR(64),
+  `userAgent`    TEXT,
+  `success`      TINYINT(1) NOT NULL DEFAULT 1,
+  `errorMsg`     TEXT,
+  `durationMs`   INT,
+  `createdAt`    DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT `operation_logs_id` PRIMARY KEY (`id`),
+  INDEX `idx_op_logs_user_time`     (`userId`,      `createdAt`),
+  INDEX `idx_op_logs_action_time`   (`action`,      `createdAt`),
+  INDEX `idx_op_logs_resource`      (`resourceCode`,`createdAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ─── 初始系统配置 ──────────────────────────────────────────────────────────────
 INSERT IGNORE INTO `system_configs` (`key`, `configKey`, `value`, `description`, `category`) VALUES
   ('system_name',       'system_name',       '报表查询系统', '系统名称',                                    'general'),

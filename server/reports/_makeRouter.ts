@@ -14,6 +14,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getReportModuleByCode, checkUserReportPermission, getReportModuleDatasource } from "../db";
 import { getClickHouseClient } from "../datasource";
+import { logOperation } from "../_core/operationLog";
 import type { ReportPlugin } from "./_types";
 
 /** 权限检查辅助函数：管理员放行；否则查 report_modules + report_permissions */
@@ -77,14 +78,37 @@ export function makeReportRouter<
       .query(async ({ ctx, input }) => {
         await assertPermission(ctx.user, code, "view", "无查看权限");
         const ds = await getReportModuleDatasource(code);
-        if (ds && ds.type === "clickhouse") {
-          const client = getClickHouseClient(ds);
-          return p.query(client, input as Input);
+        const start = Date.now();
+        let success = true;
+        let errorMsg: string | null = null;
+        try {
+          if (ds && ds.type === "clickhouse") {
+            const client = getClickHouseClient(ds);
+            return await p.query(client, input as Input);
+          }
+          if (p.mockQuery) {
+            return p.mockQuery(input as Input);
+          }
+          return p.emptyQueryResult;
+        } catch (err) {
+          success = false;
+          errorMsg = err instanceof Error ? err.message : String(err);
+          throw err;
+        } finally {
+          // 记录报表查看日志（含查询条件）
+          logOperation({
+            user: ctx.user,
+            action: "view",
+            resourceType: "report",
+            resourceCode: code,
+            resourceName: p.meta.name,
+            params: input,
+            req: ctx.req,
+            success,
+            errorMsg,
+            durationMs: Date.now() - start,
+          }).catch(() => {});
         }
-        if (p.mockQuery) {
-          return p.mockQuery(input as Input);
-        }
-        return p.emptyQueryResult;
       }),
 
     // ─── 导出数据 ──────────────────────────────────────────────────────────

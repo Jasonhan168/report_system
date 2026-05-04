@@ -78,7 +78,7 @@ export default function Login() {
 
         {/* 底部版权 */}
         <p className="relative z-10 text-white/35 text-xs">
-          © {new Date().getFullYear()} 西山居报表查询系统 · 企业内部使用
+          © {new Date().getFullYear()} 西山居报表查询系统 · Written by Jason Han
         </p>
       </div>
 
@@ -171,7 +171,7 @@ export default function Login() {
           </form>
 
           <p className="text-center text-[oklch(0.65_0.05_250)] text-xs mt-8">
-            © {new Date().getFullYear()} 西山居报表查询系统 · 企业内部使用
+            © {new Date().getFullYear()} 西山居报表查询系统 · Written by Jason Han
           </p>
         </div>
       </div>

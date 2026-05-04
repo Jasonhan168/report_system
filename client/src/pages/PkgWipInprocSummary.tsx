@@ -199,6 +199,20 @@ export default function PkgWipInprocSummary() {
 
   const { data: viewPerm } = trpc.pkgWipInprocSummary.checkPermission.useQuery({ type: "view" });
   const { data: exportPerm } = trpc.pkgWipInprocSummary.checkPermission.useQuery({ type: "export" });
+  const logClient = trpc.operationLogs.logClient.useMutation();
+
+  // 下钻时记录日志并跳转
+  const drillTo = useCallback(
+    (targetCode: string, targetRoute: string, queryString: string, extraParams?: Record<string, unknown>) => {
+      logClient.mutate({
+        action: "drill_down",
+        resourceCode: targetCode,
+        params: { fromCode: "pkg_wip_inproc_summary", queryString, ...(extraParams ?? {}) },
+      });
+      navigate(`${targetRoute}?${queryString}`);
+    },
+    [logClient, navigate],
+  );
 
   const { data: filterOpts } = trpc.pkgWipInprocSummary.filterOptions.useQuery(
     undefined,
@@ -458,7 +472,7 @@ export default function PkgWipInprocSummary() {
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">
                         {row.unissued_qty !== 0 ? (
-                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/reports/outsource-order-detail?${outsourceParams}`)}>
+                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => drillTo("outsource_order_detail", "/reports/outsource-order-detail", outsourceParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
                             {fmtCell(row.unissued_qty)}
                           </button>
                         ) : ""}
@@ -470,7 +484,7 @@ export default function PkgWipInprocSummary() {
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs font-semibold">
                         {rowAny.wip_qty && rowAny.wip_qty !== 0 ? (
-                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => navigate(`/reports/pkg-wip-inproc-detail?${inprocDetailParams}`)}>
+                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => drillTo("pkg_wip_inproc_detail", "/reports/pkg-wip-inproc-detail", inprocDetailParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
                             {fmtCell(rowAny.wip_qty)}
                           </button>
                         ) : ""}

@@ -1,8 +1,9 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
-  users, datasources, reportModules, reportPermissions, systemConfigs,
+  users, datasources, reportModules, reportPermissions, systemConfigs, operationLogs,
   InsertUser, InsertDatasource, InsertReportModule, InsertReportPermission, InsertSystemConfig,
+  InsertOperationLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { ALL_REPORTS } from "./reports/_registry";
@@ -252,6 +253,121 @@ export async function upsertSystemConfig(data: {
   });
 }
 
+// ─── 用户操作日志 ──────────────────────────────────────────────────────────────
+export async function insertOperationLog(data: InsertOperationLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(operationLogs).values(data);
+  } catch (err) {
+    console.warn("[operationLog] insert failed:", err);
+  }
+}
+
+export interface ListOperationLogOptions {
+  action?: string;
+  userId?: number;
+  resourceCode?: string;
+  keyword?: string;
+  startTime?: Date;
+  endTime?: Date;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listOperationLogs(opts: ListOperationLogOptions = {}) {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+  if (opts.action) conditions.push(eq(operationLogs.action, opts.action));
+  if (opts.userId) conditions.push(eq(operationLogs.userId, opts.userId));
+  if (opts.resourceCode) conditions.push(eq(operationLogs.resourceCode, opts.resourceCode));
+  if (opts.startTime) conditions.push(sql`${operationLogs.createdAt} >= ${opts.startTime}`);
+  if (opts.endTime) conditions.push(sql`${operationLogs.createdAt} <= ${opts.endTime}`);
+  if (opts.keyword) {
+    const like = `%${opts.keyword}%`;
+    conditions.push(sql`(${operationLogs.userName} LIKE ${like} OR ${operationLogs.userOpenId} LIKE ${like} OR ${operationLogs.resourceName} LIKE ${like})`);
+  }
+  const whereExpr = conditions.length ? and(...conditions) : undefined;
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 20));
+
+  const baseQuery = db.select().from(operationLogs);
+  const rowsQuery = whereExpr ? baseQuery.where(whereExpr) : baseQuery;
+  const rows = await rowsQuery
+    .orderBy(desc(operationLogs.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  const countBase = db.select({ c: sql<number>`count(*)` }).from(operationLogs);
+  const countRes = whereExpr ? await countBase.where(whereExpr) : await countBase;
+  const total = Number(countRes[0]?.c ?? 0);
+
+  return { rows, total };
+}
+
+/** 导出专用：同样的过滤条件，但不分页，支持最多 50000 行。*/
+export async function listOperationLogsForExport(
+  opts: Omit<ListOperationLogOptions, "page" | "pageSize"> & { limit?: number } = {},
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [];
+  if (opts.action) conditions.push(eq(operationLogs.action, opts.action));
+  if (opts.userId) conditions.push(eq(operationLogs.userId, opts.userId));
+  if (opts.resourceCode) conditions.push(eq(operationLogs.resourceCode, opts.resourceCode));
+  if (opts.startTime) conditions.push(sql`${operationLogs.createdAt} >= ${opts.startTime}`);
+  if (opts.endTime) conditions.push(sql`${operationLogs.createdAt} <= ${opts.endTime}`);
+  if (opts.keyword) {
+    const like = `%${opts.keyword}%`;
+    conditions.push(sql`(${operationLogs.userName} LIKE ${like} OR ${operationLogs.userOpenId} LIKE ${like} OR ${operationLogs.resourceName} LIKE ${like})`);
+  }
+  const whereExpr = conditions.length ? and(...conditions) : undefined;
+  const limit = Math.min(50000, Math.max(1, opts.limit ?? 10000));
+
+  const baseQuery = db.select().from(operationLogs);
+  const rowsQuery = whereExpr ? baseQuery.where(whereExpr) : baseQuery;
+  return await rowsQuery.orderBy(desc(operationLogs.createdAt)).limit(limit);
+}
+
+/** 启动自动建操作日志表，兼容未跑 drizzle 迁移的部署 */
+async function ensureOperationLogTable() {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS operation_logs (
+        id INT AUTO_INCREMENT NOT NULL,
+        userId INT NULL,
+        userOpenId VARCHAR(64) NULL,
+        userName VARCHAR(128) NULL,
+        action VARCHAR(32) NOT NULL,
+        resourceType VARCHAR(32) NULL,
+        resourceCode VARCHAR(64) NULL,
+        resourceName VARCHAR(128) NULL,
+        params JSON NULL,
+        ip VARCHAR(64) NULL,
+        userAgent TEXT NULL,
+        success TINYINT(1) NOT NULL DEFAULT 1,
+        errorMsg TEXT NULL,
+        durationMs INT NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT operation_logs_id PRIMARY KEY (id),
+        INDEX idx_op_logs_user_time (userId, createdAt),
+        INDEX idx_op_logs_action_time (action, createdAt),
+        INDEX idx_op_logs_resource (resourceCode, createdAt)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  } catch (err) {
+    console.warn("[operationLog] ensure table failed:", err);
+  }
+}
+
 // ─── 初始化默认数据 ────────────────────────────────────────────────────────────
 let _initialized = false;
 
@@ -261,6 +377,9 @@ export async function initDefaultData() {
 
   const db = await getDb();
   if (!db) return;
+
+  // 确保操作日志表存在
+  await ensureOperationLogTable();
 
   // 默认Mock数据源
   const existingDs = await getAllDatasources();

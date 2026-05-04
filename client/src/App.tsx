@@ -13,6 +13,7 @@ import AdminPermissions from "./pages/admin/AdminPermissions";
 import AdminReportModules from "./pages/admin/AdminReportModules";
 import AdminDatasources from "./pages/admin/AdminDatasources";
 import AdminSystemConfig from "./pages/admin/AdminSystemConfig";
+import AdminOperationLogs from "./pages/admin/AdminOperationLogs";
 
 function Router() {
   const [location] = useLocation();
@@ -38,6 +39,7 @@ function Router() {
         <Route path="/admin/report-modules" component={AdminReportModules} />
         <Route path="/admin/datasources" component={AdminDatasources} />
         <Route path="/admin/system-config" component={AdminSystemConfig} />
+        <Route path="/admin/operation-logs" component={AdminOperationLogs} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import {
   BarChart3, ChevronRight, Database, FileText, Home,
-  List, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Users,
+  List, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ScrollText, Settings, Shield, Users,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
@@ -29,6 +29,7 @@ const ADMIN_ITEMS = [
   { label: "报表模块", href: "/admin/report-modules", icon: FileText },
   { label: "数据源配置", href: "/admin/datasources", icon: Database },
   { label: "系统配置", href: "/admin/system-config", icon: Settings },
+  { label: "操作日志", href: "/admin/operation-logs", icon: ScrollText },
 ];
 
 // 单个导航项

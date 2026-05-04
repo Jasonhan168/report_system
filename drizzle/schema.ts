@@ -93,3 +93,39 @@ export const systemConfigs = mysqlTable("system_configs", {
 
 export type SystemConfig = typeof systemConfigs.$inferSelect;
 export type InsertSystemConfig = typeof systemConfigs.$inferInsert;
+
+// ─── 用户操作日志表 ────────────────────────────────────────────────────────────
+// 记录：登录/登出/登录失败、报表查看、报表导出、报表下钻 等用户操作。
+export const operationLogs = mysqlTable("operation_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 操作用户 id（登录失败时可为 null） */
+  userId: int("userId"),
+  /** 操作用户 openId（冗余，便于登录失败场景留痕） */
+  userOpenId: varchar("userOpenId", { length: 64 }),
+  /** 用户显示名 */
+  userName: varchar("userName", { length: 128 }),
+  /** 动作：login / login_failed / logout / view / export / drill_down */
+  action: varchar("action", { length: 32 }).notNull(),
+  /** 资源类型：report / auth */
+  resourceType: varchar("resourceType", { length: 32 }),
+  /** 资源编码（报表 code，如 pkg_wip_summary） */
+  resourceCode: varchar("resourceCode", { length: 64 }),
+  /** 资源显示名（报表中文名） */
+  resourceName: varchar("resourceName", { length: 128 }),
+  /** 查询条件 / 下钻参数 / 登录用户名等（JSON） */
+  params: json("params"),
+  /** 客户端 IP */
+  ip: varchar("ip", { length: 64 }),
+  /** UA 信息 */
+  userAgent: text("userAgent"),
+  /** 是否成功 */
+  success: boolean("success").default(true).notNull(),
+  /** 失败原因 */
+  errorMsg: text("errorMsg"),
+  /** 耗时（毫秒） */
+  durationMs: int("durationMs"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OperationLog = typeof operationLogs.$inferSelect;
+export type InsertOperationLog = typeof operationLogs.$inferInsert;
