@@ -41,6 +41,24 @@ function fmtDate(v: string | null | undefined): string {
   return String(v).slice(0, 10);
 }
 
+/** 计算距交期剩余天数（负数表示已拖期，null 表示无交期） */
+function daysUntilEdd(edd: string | null | undefined): number | null {
+  if (!edd) return null;
+  const eddDate = new Date(edd);
+  if (isNaN(eddDate.getTime())) return null;
+  const today = new Date(localToday());
+  return Math.floor((eddDate.getTime() - today.getTime()) / 86400000);
+}
+
+/** 返回行高亮样式：已拖期=红色，临近交期(<=5天)=琥珀色 */
+function rowHighlight(edd: string | null | undefined): string {
+  const remaining = daysUntilEdd(edd);
+  if (remaining === null) return "";
+  if (remaining < 0)  return "bg-red-50 hover:bg-red-100";
+  if (remaining <= 5) return "bg-amber-50 hover:bg-amber-100";
+  return "";
+}
+
 // ─── 可输入模糊搜索 Combobox ───────────────────────────────────────────────
 interface FuzzyComboboxProps {
   options: string[];
@@ -198,17 +216,17 @@ function highlightMatch(text: string, keyword: string) {
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
-// 表头定义
+// 表头定义（含预计交期和拖期天数）
 const HEADERS = [
-  "委外订单号", "下单日期", "加工类型", "委外厂商",
+  "委外订单号", "下单日期", "预计交期", "加工类型", "委外厂商",
   "ERP料号", "Lot No.", "标签品名", "供应商料号", "封装形式",
   "下单数量", "未回货数量", "装片前", "装片", "焊线", "塑封", "测试", "测试后",
-  "更新时间",
+  "更新时间", "拖期天数",
 ];
 const COL_COUNT = HEADERS.length;
-// 数值列（从第10列起，索引9~16）
-const NUM_COL_START = 9;
-const NUM_COL_END   = 16;
+// 数值列（从第11列起，索引10~17）
+const NUM_COL_START = 10;
+const NUM_COL_END   = 17;
 
 export default function EngPkgWip() {
   const [vendorName,  setVendorName]  = useState("");
@@ -473,17 +491,34 @@ export default function EngPkgWip() {
                 </TableRow>
               ) : (
                 <>
-                  {data?.data.map((row, idx) => (
+                  {data?.data.map((row, idx) => {
+                    const highlight = rowHighlight(row.edd);
+                    return (
                     <TableRow
                       key={idx}
                       className={cn(
                         "transition-colors",
-                        idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]",
+                        highlight
+                          ? highlight
+                          : idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]",
                       )}
                     >
                       <TableCell className="px-3 py-2.5 text-xs font-medium">{row.order_no}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         {fmtDate(row.order_date)}
+                      </TableCell>
+                      {/* 预计交期：已拖期红色，临近交期琶珀色 */}
+                      <TableCell className={cn(
+                        "px-3 py-2.5 text-xs whitespace-nowrap",
+                        (() => {
+                          const r = daysUntilEdd(row.edd);
+                          if (r === null) return "text-muted-foreground";
+                          if (r < 0)  return "text-red-600 font-semibold";
+                          if (r <= 5) return "text-amber-600 font-semibold";
+                          return "text-muted-foreground";
+                        })()
+                      )}>
+                        {fmtDate(row.edd)}
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.process_type}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
@@ -503,13 +538,20 @@ export default function EngPkgWip() {
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         {fmtDateTime(row.update_time)}
                       </TableCell>
+                      {/* 拖期天数：>0 才显示，红色加粗 */}
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {row.overdue_days > 0
+                          ? <span className="text-red-600 font-semibold">{row.overdue_days}</span>
+                          : ""}
+                      </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
 
                   {/* 合计行 */}
                   {data?.totalRow && (
                     <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
-                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={5}>
+                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={6}>
                         合计
                       </TableCell>
                       <TableCell className="px-3 py-3 text-xs font-bold text-primary" colSpan={4} />

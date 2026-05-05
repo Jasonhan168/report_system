@@ -27,6 +27,7 @@ function localToday(): string {
 interface Row {
   order_no: string;
   order_date: string;
+  edd: string;           // 预计交期
   process_type: string;
   vendor_name: string;
   part_no: string;
@@ -43,6 +44,7 @@ interface Row {
   testing: number;
   test_done: number;
   update_time: string;
+  overdue_days: number;  // 拖期天数（后端计算）
 }
 
 interface Input {
@@ -63,17 +65,19 @@ interface QueryReturn {
   rows: Row[];
   data: Row[];
   total: number;
-  totalRow: Omit<Row, "order_no" | "order_date" | "process_type" | "vendor_name" | "part_no" | "lot_no" | "label" | "vendor_part_no" | "package_type" | "update_time"> & {
+  totalRow: Omit<Row, "order_no" | "order_date" | "edd" | "process_type" | "vendor_name" | "part_no" | "lot_no" | "label" | "vendor_part_no" | "package_type" | "update_time" | "overdue_days"> & {
     label: string;
     vendor_name: string;
     order_no: string;
     order_date: string;
+    edd: string;
     process_type: string;
     part_no: string;
     lot_no: string;
     vendor_part_no: string;
     package_type: string;
     update_time: string;
+    overdue_days: number;
   };
 }
 
@@ -96,12 +100,22 @@ function fmtDateTime(v: string | null | undefined): string {
   return s;
 }
 
+/** 计算拖期天数：edd < 今日则返回正整数天数，否则返回 0 */
+function computeOverdueDays(edd: string | null | undefined): number {
+  if (!edd) return 0;
+  const eddDate = new Date(edd);
+  if (isNaN(eddDate.getTime())) return 0;
+  const today = new Date(localToday());
+  return Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / 86400000));
+}
+
 // ─── 联合查询 SQL（集合 A UNION ALL 集合 B）────────────────────────────────────
 const UNION_SQL = `
 /* ========== 集合 A：非江苏长电厂商 ========== */
 SELECT
     ifNull(o.order_no, '')         AS order_no,
     toString(ifNull(o.order_date, '')) AS order_date,
+    toString(ifNull(o.edd, ''))    AS edd,
     ifNull(o.process_type, '')     AS process_type,
     ifNull(o.vendor_name, '')      AS vendor_name,
     ifNull(o.part_no, '')          AS part_no,
@@ -120,7 +134,7 @@ SELECT
     toString(ifNull(w.update_time, '')) AS update_time
 FROM
 (
-    SELECT process_type, order_no, order_date, vendor_name, label, part_no,
+    SELECT process_type, order_no, order_date, edd, vendor_name, label, part_no,
            vendor_part_no, package_type, lot_no, qty AS order_qty, open_qty
     FROM v_dwd_order
     WHERE date = today()
@@ -144,6 +158,7 @@ UNION ALL
 SELECT
     ifNull(o.order_no, '')         AS order_no,
     toString(ifNull(o.order_date, '')) AS order_date,
+    toString(ifNull(o.edd, ''))    AS edd,
     ifNull(o.process_type, '')     AS process_type,
     ifNull(o.vendor_name, '')      AS vendor_name,
     ifNull(o.part_no, '')          AS part_no,
@@ -165,6 +180,7 @@ FROM
     SELECT order_no, vendor_part_no,
            any(process_type)   AS process_type,
            any(order_date)     AS order_date,
+           any(edd)            AS edd,
            vendor_name,
            any(label)          AS label,
            any(part_no)        AS part_no,
@@ -199,9 +215,13 @@ function buildWhere(p: Input): string {
 }
 
 function toRow(r: Record<string, unknown>): Row {
+  const edd = String(r.edd ?? "").slice(0, 10);
+  // 截取 yyyy-mm-dd 部分；ClickHouse 可能返回 Date 对象或带时间的字符串
+  const eddStr = edd.startsWith("0000") ? "" : edd;
   return {
     order_no:      String(r.order_no      ?? ""),
     order_date:    String(r.order_date    ?? ""),
+    edd:           eddStr,
     process_type:  String(r.process_type  ?? ""),
     vendor_name:   String(r.vendor_name   ?? ""),
     part_no:       String(r.part_no       ?? ""),
@@ -218,6 +238,7 @@ function toRow(r: Record<string, unknown>): Row {
     testing:       Number(r.testing       ?? 0),
     test_done:     Number(r.test_done     ?? 0),
     update_time:   String(r.update_time   ?? ""),
+    overdue_days:  computeOverdueDays(eddStr),
   };
 }
 
@@ -265,6 +286,7 @@ WHERE ${where}`;
   const totalRow: QueryReturn["totalRow"] = {
     order_no: "",
     order_date: "",
+    edd: "",
     process_type: "",
     vendor_name: "",
     part_no: "",
@@ -281,6 +303,7 @@ WHERE ${where}`;
     testing:       Number(t.testing       ?? 0),
     test_done:     Number(t.test_done     ?? 0),
     update_time:   String(t.update_time   ?? ""),
+    overdue_days:  0,
   };
   return { rows, data: rows, total, totalRow };
 }
@@ -320,11 +343,11 @@ async function queryExport(client: ClickHouseClient, input: Input): Promise<Expo
 
 // ─── 空合计行 ────────────────────────────────────────────────────────────────
 const EMPTY_TOTAL_ROW: QueryReturn["totalRow"] = {
-  order_no: "", order_date: "", process_type: "", vendor_name: "",
+  order_no: "", order_date: "", edd: "", process_type: "", vendor_name: "",
   part_no: "", lot_no: "合计", label: "", vendor_part_no: "",
   package_type: "", order_qty: 0, open_qty: 0, before_attach: 0,
   die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0,
-  update_time: "",
+  update_time: "", overdue_days: 0,
 };
 
 // ─── 插件定义 ────────────────────────────────────────────────────────────────
@@ -376,10 +399,11 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
       else if (input.packageType) parts.push(input.packageType);
       return parts;
     },
-    leftAlignCols: 9,
+    leftAlignCols: 10,
     columns: [
       { header: "委外订单号",   width: 18, value: (r) => r.order_no },
       { header: "下单日期",     width: 12, value: (r) => String(r.order_date ?? "").slice(0, 10) },
+      { header: "预计交期",     width: 12, value: (r) => r.edd || "" },
       { header: "加工类型",     width: 12, value: (r) => r.process_type },
       { header: "委外厂商",     width: 18, value: (r) => r.vendor_name },
       { header: "ERP料号",      width: 16, value: (r) => r.part_no },
@@ -404,6 +428,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
       { header: "测试后",       width: 10, value: (r) => r.test_done,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.test_done) || 0), 0) },
       { header: "更新时间",     width: 20, value: (r) => fmtDateTime(r.update_time) },
+      { header: "拖期天数",     width: 10, value: (r) => r.overdue_days > 0 ? r.overdue_days : "" },
     ],
   },
 };
