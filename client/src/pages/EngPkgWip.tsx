@@ -448,15 +448,15 @@ export default function EngPkgWip() {
         </div>
 
         {/* 表格主体 */}
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <Table className="text-sm">
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10">
               <TableRow className="bg-secondary/50 hover:bg-secondary/50">
                 {HEADERS.map((h, i) => (
                   <TableHead
                     key={h}
                     className={cn(
-                      "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3",
+                      "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3 bg-secondary/50",
                       i >= NUM_COL_START && i <= NUM_COL_END && "text-right",
                     )}
                   >
