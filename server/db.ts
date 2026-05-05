@@ -392,9 +392,9 @@ export async function initDefaultData() {
     });
   }
 
-  // 默认报表模块 —— 由 ALL_REPORTS 自动生成；每次启动都会同步元数据
-  // （name/category/description/route/icon/sortOrder），但保留 datasourceId 与 isActive
-  // 由管理员在后台配置。
+  // 默认报表模块 —— 由 ALL_REPORTS 自动生成；
+  // SYNC_REPORT_META_ON_STARTUP=false 时仅插入新模块，不覆盖已有记录（保留管理员后台修改）。
+  // 默认 true，开发/测试环境保持元数据最新。
   const existingModules = await getAllReportModules();
   const existingMap = new Map(existingModules.map((m) => [m.code, m]));
   for (const plugin of ALL_REPORTS) {
@@ -403,7 +403,7 @@ export async function initDefaultData() {
       await db.insert(reportModules).values({
         code, name, category, description, route, sortOrder, isActive: true,
       });
-    } else {
+    } else if (ENV.syncReportMetaOnStartup) {
       await db.update(reportModules)
         .set({ name, category, description, route, sortOrder })
         .where(eq(reportModules.code, code))

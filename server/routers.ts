@@ -308,6 +308,13 @@ export const appRouter = router({
       return modules.filter((m) => allowedIds.has(m.id));
     }),
     listAll: adminProcedure.query(async () => getAllReportModules()),
+    getByCode: protectedProcedure
+      .input(z.object({ code: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const mod = await getReportModuleByCode(input.code);
+        if (!mod) throw new Error("报表模块不存在");
+        return mod;
+      }),
     create: adminProcedure
       .input(z.object({
         code: z.string().min(1),

@@ -210,6 +210,7 @@ export default function PkgWipSummary() {
 
   const { data: viewPerm } = trpc.pkgWipSummary.checkPermission.useQuery({ type: "view" });
   const { data: exportPerm } = trpc.pkgWipSummary.checkPermission.useQuery({ type: "export" });
+  const { data: moduleMeta } = trpc.reportModules.getByCode.useQuery({ code: "pkg_wip_summary" });
   const logClient = trpc.operationLogs.logClient.useMutation();
 
   // 下钻时记录日志并跳转（不阻塞跳转，日志写入失败不影响用户体验）
@@ -314,7 +315,7 @@ export default function PkgWipSummary() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-foreground">封装厂WIP汇总表</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">展示封装厂各工序在制品（WIP）汇总数据</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{moduleMeta?.description || ""}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">

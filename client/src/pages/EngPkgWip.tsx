@@ -240,6 +240,7 @@ export default function EngPkgWip() {
 
   const { data: viewPerm }   = trpc.engPkgWip.checkPermission.useQuery({ type: "view" });
   const { data: exportPerm } = trpc.engPkgWip.checkPermission.useQuery({ type: "export" });
+  const { data: moduleMeta } = trpc.reportModules.getByCode.useQuery({ code: "eng_pkg_wip" });
 
   const { data: filterOpts } = trpc.engPkgWip.filterOptions.useQuery(
     undefined,
@@ -329,7 +330,7 @@ export default function EngPkgWip() {
         <div>
           <h1 className="text-xl font-bold text-foreground">工程批封装在制品报表</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            仅展示当天工程批（production_type=2:工程）各工序在制品明细，未结案且回货率 &lt; 98%
+            {moduleMeta?.description || ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
