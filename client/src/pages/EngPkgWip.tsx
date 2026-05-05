@@ -214,17 +214,19 @@ function highlightMatch(text: string, keyword: string) {
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
-// 表头定义（含预计交期和拖期天数）
+// 表头定义（新字段顺序）
 const HEADERS = [
-  "委外订单号", "下单日期", "预计交期", "加工类型", "委外厂商",
-  "ERP料号", "Lot No.", "标签品名", "供应商料号", "封装形式",
+  // 0          1          2           3           4
+  "下单日期", "Lot No.", "标签品名", "供应商料号", "封装形式",
+  // 5          6            7      8      9      10     11     12
   "下单数量", "未回货数量", "装片前", "装片", "焊线", "塑封", "测试", "测试后",
-  "更新时间", "拖期天数",
+  // 13       14       15       16       17       18       19
+  "更新时间", "拖期天数", "预计交期", "委外厂商", "委外订单号", "加工类型", "ERP料号",
 ];
 const COL_COUNT = HEADERS.length;
-// 数值列（从第11列起，索引10~17）
-const NUM_COL_START = 10;
-const NUM_COL_END   = 17;
+// 数值列（下单数量~测试后，索引5~12）
+const NUM_COL_START = 5;
+const NUM_COL_END   = 12;
 
 export default function EngPkgWip() {
   const [vendorName,  setVendorName]  = useState("");
@@ -501,11 +503,41 @@ export default function EngPkgWip() {
                           : idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]",
                       )}
                     >
-                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.order_no}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">
-                        {fmtDate(row.order_date)}
+                      {/* 0: 下单日期 */}
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">{fmtDate(row.order_date)}</td>
+                      {/* 1: Lot No. */}
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.lot_no}</td>
+                      {/* 2: 标签品名 */}
+                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.label}</td>
+                      {/* 3: 供应商料号 */}
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.vendor_part_no}</td>
+                      {/* 4: 封装形式 */}
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.package_type}</td>
+                      {/* 5: 下单数量 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.order_qty)}</td>
+                      {/* 6: 未回货数量 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.open_qty)}</td>
+                      {/* 7: 装片前 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.before_attach)}</td>
+                      {/* 8: 装片 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.die_attach)}</td>
+                      {/* 9: 焊线 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.wire_bond)}</td>
+                      {/* 10: 塑封 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.molding)}</td>
+                      {/* 11: 测试 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.testing)}</td>
+                      {/* 12: 测试后 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.test_done)}</td>
+                      {/* 13: 更新时间 */}
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">{fmtDateTime(row.update_time)}</td>
+                      {/* 14: 拖期天数 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">
+                        {row.overdue_days > 0
+                          ? <span className="text-red-600 font-semibold">{row.overdue_days}</span>
+                          : ""}
                       </td>
-                      {/* 预计交期：已拖期红色，临近交期琶珀色 */}
+                      {/* 15: 预计交期 */}
                       <td className={cn(
                         "px-3 py-2.5 text-xs whitespace-nowrap p-2 align-middle",
                         (() => {
@@ -515,33 +547,15 @@ export default function EngPkgWip() {
                           if (r <= 5) return "text-amber-600 font-semibold";
                           return "text-muted-foreground";
                         })()
-                      )}>
-                        {fmtDate(row.edd)}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.process_type}</td>
+                      )}>{fmtDate(row.edd)}</td>
+                      {/* 16: 委外厂商 */}
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.vendor_name}</td>
+                      {/* 17: 委外订单号 */}
+                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.order_no}</td>
+                      {/* 18: 加工类型 */}
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.process_type}</td>
+                      {/* 19: ERP料号 */}
                       <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.part_no}</td>
-                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.lot_no}</td>
-                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.label}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.vendor_part_no}</td>
-                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.package_type}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.order_qty)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.open_qty)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.before_attach)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.die_attach)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.wire_bond)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.molding)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.testing)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.test_done)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">
-                        {fmtDateTime(row.update_time)}
-                      </td>
-                      {/* 拖期天数：>0 才显示，红色加粗 */}
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">
-                        {row.overdue_days > 0
-                          ? <span className="text-red-600 font-semibold">{row.overdue_days}</span>
-                          : ""}
-                      </td>
                     </tr>
                     );
                   })}
@@ -549,35 +563,26 @@ export default function EngPkgWip() {
                   {/* 合计行 */}
                   {data?.totalRow && (
                     <tr className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
-                      <td className="px-3 py-3 font-bold text-xs text-primary p-2 align-middle" colSpan={6}>
-                        合计
-                      </td>
-                      <td className="px-3 py-3 text-xs font-bold text-primary p-2 align-middle" colSpan={4} />
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.order_qty)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.open_qty)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.before_attach)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.die_attach)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.wire_bond)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.molding)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.testing)}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
-                        {fmtCell(data.totalRow.test_done)}
-                      </td>
-                      <td />
+                      {/* 前 5 列：下单日期/Lot No./标签品名/供应商料号/封装形式 —— 显示"合计" */}
+                      <td className="px-3 py-3 font-bold text-xs text-primary p-2 align-middle" colSpan={5}>合计</td>
+                      {/* 第 5：下单数量 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.order_qty)}</td>
+                      {/* 第 6：未回货数量 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.open_qty)}</td>
+                      {/* 第 7：装片前 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.before_attach)}</td>
+                      {/* 第 8：装片 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.die_attach)}</td>
+                      {/* 第 9：焊线 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.wire_bond)}</td>
+                      {/* 第 10：塑封 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.molding)}</td>
+                      {/* 第 11：测试 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.testing)}</td>
+                      {/* 第 12：测试后 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.test_done)}</td>
+                      {/* 第 13~19：更新时间/拖期天数/预计交期/委外厂商/委外订单号/加工类型/ERP料号 —— 空白 */}
+                      <td colSpan={7} />
                     </tr>
                   )}
                 </>

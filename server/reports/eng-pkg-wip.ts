@@ -399,18 +399,15 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
       else if (input.packageType) parts.push(input.packageType);
       return parts;
     },
-    leftAlignCols: 10,
+    leftAlignCols: 5,
     columns: [
-      { header: "委外订单号",   width: 18, value: (r) => r.order_no },
+      // 前 5 列：文本左对齐
       { header: "下单日期",     width: 12, value: (r) => String(r.order_date ?? "").slice(0, 10) },
-      { header: "预计交期",     width: 12, value: (r) => r.edd || "" },
-      { header: "加工类型",     width: 12, value: (r) => r.process_type },
-      { header: "委外厂商",     width: 18, value: (r) => r.vendor_name },
-      { header: "ERP料号",      width: 16, value: (r) => r.part_no },
       { header: "Lot No.",      width: 16, value: (r) => r.lot_no },
       { header: "标签品名",     width: 24, value: (r) => r.label },
       { header: "供应商料号",   width: 18, value: (r) => r.vendor_part_no },
       { header: "封装形式",     width: 14, value: (r) => r.package_type },
+      // 数值列：右对齐
       { header: "下单数量",     width: 12, value: (r) => r.order_qty,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.order_qty) || 0), 0) },
       { header: "未回货数量",   width: 12, value: (r) => r.open_qty,
@@ -427,8 +424,14 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.testing) || 0), 0) },
       { header: "测试后",       width: 10, value: (r) => r.test_done,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.test_done) || 0), 0) },
+      // 其余列
       { header: "更新时间",     width: 20, value: (r) => fmtDateTime(r.update_time) },
       { header: "拖期天数",     width: 10, value: (r) => r.overdue_days > 0 ? r.overdue_days : "" },
+      { header: "预计交期",     width: 12, value: (r) => r.edd || "" },
+      { header: "委外厂商",     width: 18, value: (r) => r.vendor_name },
+      { header: "委外订单号",   width: 18, value: (r) => r.order_no },
+      { header: "加工类型",     width: 12, value: (r) => r.process_type },
+      { header: "ERP料号",      width: 16, value: (r) => r.part_no },
     ],
   },
 };
