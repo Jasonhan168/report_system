@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollText, RefreshCw, Search, ChevronLeft, ChevronRight, Download } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, localToday } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
@@ -40,15 +40,20 @@ function formatParams(p: unknown): string {
 }
 
 export default function AdminOperationLogs() {
+  const toInputDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const today = new Date();
-  const toInputDate = (d: Date) => d.toISOString().slice(0, 10);
   const weekAgo = new Date(today);
   weekAgo.setDate(weekAgo.getDate() - 6);
 
   const [action, setAction] = useState<string>("all");
   const [keyword, setKeyword] = useState("");
   const [startDate, setStartDate] = useState(toInputDate(weekAgo));
-  const [endDate, setEndDate] = useState(toInputDate(today));
+  const [endDate, setEndDate] = useState(localToday());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 

@@ -9,6 +9,15 @@ import { z } from "zod";
 import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
 
+/** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 interface Row {
   order_no: string;
   order_date: string;
@@ -50,7 +59,7 @@ function esc(v: string): string {
 }
 
 function buildWhere(f: Input): string {
-  const date = f.date || new Date().toISOString().slice(0, 10);
+  const date = f.date || localToday();
   const parts: string[] = [
     `date = '${esc(date)}'`,
     `received_rate < 98`,
@@ -98,7 +107,7 @@ function computeOverdueDays(edd: string): number {
   if (!edd) return 0;
   const eddDate = new Date(edd);
   if (isNaN(eddDate.getTime())) return 0;
-  const today = new Date(new Date().toISOString().slice(0, 10));
+  const today = new Date(localToday());
   return Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / 86400000));
 }
 
@@ -131,7 +140,7 @@ async function queryData(client: ClickHouseClient, input: Input): Promise<{ rows
 }
 
 async function queryFilter(client: ClickHouseClient, input: FilterInput): Promise<FilterOptions> {
-  const d = input.date || new Date().toISOString().slice(0, 10);
+  const d = input.date || localToday();
   const sql = `
     SELECT
       groupUniqArray(production_type) AS production_types,
@@ -207,9 +216,9 @@ const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
 
   excel: {
     sheetName: "委外订单明细表",
-    title: (input) => `委外订单明细表  ${input.date || new Date().toISOString().slice(0, 10)}`,
+    title: (input) => `委外订单明细表  ${input.date || localToday()}`,
     filenameParts: (input) => {
-      const d = input.date || new Date().toISOString().slice(0, 10);
+      const d = input.date || localToday();
       const parts = ["委外订单明细表", d];
       if (input.vendorName) parts.push(input.vendorName);
       else if (input.labelName) parts.push(input.labelName);

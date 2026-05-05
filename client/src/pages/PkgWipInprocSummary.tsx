@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Download, Search, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, X, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, localToday } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -266,7 +266,7 @@ export default function PkgWipInprocSummary() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localToday();
       const nameParts = ["封装厂在制品汇总表", today];
       if (queryParams.vendorName) nameParts.push(queryParams.vendorName);
       else if (queryParams.labelName) nameParts.push(queryParams.labelName);
@@ -296,7 +296,7 @@ export default function PkgWipInprocSummary() {
 
   const COL_COUNT = 11;
   const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
-  const TODAY = new Date().toISOString().slice(0, 10);
+  const TODAY = localToday();
 
   return (
     <div ref={tableRef} className="p-6 report-page">

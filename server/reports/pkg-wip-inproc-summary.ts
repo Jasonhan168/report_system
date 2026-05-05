@@ -12,6 +12,15 @@ import { z } from "zod";
 import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
 
+/** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
 interface Row {
   label_name: string;
@@ -282,9 +291,9 @@ const plugin: ReportPlugin<
 
   excel: {
     sheetName: "封装厂在制品汇总表",
-    title: () => `封装厂在制品汇总表  ${new Date().toISOString().slice(0, 10)}`,
+    title: () => `封装厂在制品汇总表  ${localToday()}`,
     filenameParts: (input) => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localToday();
       const parts = ["封装厂在制品汇总表", today];
       if (input.vendorName) parts.push(input.vendorName);
       else if (input.labelName) parts.push(input.labelName);

@@ -7,6 +7,15 @@ import { z } from "zod";
 import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
 
+/** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 interface Row {
   date: string;
   vendor_name: string;
@@ -41,7 +50,7 @@ function esc(v: string): string {
 const TOTAL_WIP_EXPR = `(die_attach + wire_bond + molding + testing + test_done)`;
 
 function buildWhere(f: Input): string {
-  const date = f.date || new Date().toISOString().slice(0, 10);
+  const date = f.date || localToday();
   const parts: string[] = [`date = '${esc(date)}'`];
   if (f.vendorName) parts.push(`lower(vendor_name) LIKE lower('%${esc(f.vendorName)}%')`);
   if (f.labelName) parts.push(`lower(label_name) LIKE lower('%${esc(f.labelName)}%')`);
@@ -92,7 +101,7 @@ async function queryData(client: ClickHouseClient, input: Input): Promise<{ rows
 }
 
 async function queryFilter(client: ClickHouseClient, input: FilterInput): Promise<FilterOptions> {
-  const d = input.date || new Date().toISOString().slice(0, 10);
+  const d = input.date || localToday();
   const sql = `
     SELECT groupUniqArray(vendor_name) AS vendor_names
     FROM v_dwd_ab_wip
@@ -163,9 +172,9 @@ const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
 
   excel: {
     sheetName: "原封装厂WIP明细表",
-    title: (input) => `原封装厂WIP明细表  ${input.date || new Date().toISOString().slice(0, 10)}`,
+    title: (input) => `原封装厂WIP明细表  ${input.date || localToday()}`,
     filenameParts: (input) => {
-      const d = input.date || new Date().toISOString().slice(0, 10);
+      const d = input.date || localToday();
       const parts = ["原封装厂WIP明细表", d];
       if (input.vendorName) parts.push(input.vendorName);
       else if (input.labelName) parts.push(input.labelName);

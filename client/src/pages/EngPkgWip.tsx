@@ -17,7 +17,7 @@ import {
   Download, Search, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, X, ChevronsUpDown,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, localToday } from "@/lib/utils";
 import { useEffect } from "react";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -275,7 +275,7 @@ export default function EngPkgWip() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localToday();
       const nameParts = ["工程批封装在制品报表", today];
       if (queryParams.vendorName)  nameParts.push(queryParams.vendorName);
       else if (queryParams.label)  nameParts.push(queryParams.label);

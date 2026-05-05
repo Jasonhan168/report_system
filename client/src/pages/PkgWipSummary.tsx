@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Download, Search, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, X, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, localToday } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -190,7 +190,7 @@ function highlightMatch(text: string, keyword: string) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default function PkgWipSummary() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const [, navigate] = useLocation();
 
   // 从 URL 读取返回时恢复的筛选条件

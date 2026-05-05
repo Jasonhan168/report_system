@@ -9,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Download, RefreshCw, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { useSearch, useLocation } from "wouter";
+import { localToday } from "@/lib/utils";
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = localToday();
 
 function fmt(v: number | string | null | undefined): string {
   if (v === null || v === undefined || v === "") return "";
