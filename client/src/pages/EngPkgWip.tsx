@@ -323,9 +323,9 @@ export default function EngPkgWip() {
   }
 
   return (
-    <div ref={tableRef} className="p-6 report-page">
+    <div ref={tableRef} className="flex flex-col h-full p-4 gap-4 report-page">
       {/* 标题栏 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-foreground">工程批封装在制品报表</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -356,7 +356,7 @@ export default function EngPkgWip() {
       </div>
 
       {/* 查询条件 */}
-      <div className="bg-card rounded-xl border border-border p-5 mb-5 shadow-sm">
+      <div className="bg-card rounded-xl border border-border p-4 shadow-sm flex-shrink-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 委外厂商 */}
           <div className="space-y-1.5">
@@ -418,7 +418,7 @@ export default function EngPkgWip() {
       </div>
 
       {/* 数据表格 */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
         {/* 表格工具栏 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
           <div className="flex items-center gap-2">
@@ -448,7 +448,7 @@ export default function EngPkgWip() {
         </div>
 
         {/* 表格主体 */}
-        <div className="overflow-auto max-h-[calc(100vh-280px)]">
+        <div className="flex-1 overflow-auto min-h-0">
           <Table className="text-sm">
             <TableHeader className="sticky top-0 z-10">
               <TableRow className="bg-secondary/50 hover:bg-secondary/50">
