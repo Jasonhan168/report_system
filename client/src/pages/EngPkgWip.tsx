@@ -7,9 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+// Table 组件内部有 overflow-x-auto 包裹层会阻断 sticky，改用原生 table 标签
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -449,67 +447,67 @@ export default function EngPkgWip() {
 
         {/* 表格主体 */}
         <div className="flex-1 overflow-auto min-h-0">
-          <Table className="text-sm">
-            <TableHeader className="sticky top-0 z-10">
-              <TableRow className="bg-secondary/50 hover:bg-secondary/50">
+          <table className="w-full caption-bottom text-sm">
+            <thead className="sticky top-0 z-10 [&_tr]:border-b">
+              <tr className="bg-secondary/50 border-b transition-colors">
                 {HEADERS.map((h, i) => (
-                  <TableHead
+                  <th
                     key={h}
                     className={cn(
-                      "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3 bg-secondary/50",
+                      "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3 bg-secondary/50 text-left align-middle",
                       i >= NUM_COL_START && i <= NUM_COL_END && "text-right",
                     )}
                   >
                     {h}
-                  </TableHead>
+                  </th>
                 ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+              </tr>
+            </thead>
+            <tbody className="[&_tr:last-child]:border-0">
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i}>
+                  <tr key={i} className="border-b transition-colors">
                     {Array.from({ length: COL_COUNT }).map((_, j) => (
-                      <TableCell key={j} className="px-3 py-2.5">
+                      <td key={j} className="px-3 py-2.5 p-2 align-middle whitespace-nowrap">
                         <Skeleton className="h-4 w-full" />
-                      </TableCell>
+                      </td>
                     ))}
-                  </TableRow>
+                  </tr>
                 ))
               ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground">
+                <tr className="border-b transition-colors">
+                  <td colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground p-2 align-middle">
                     <AlertCircle size={24} className="mx-auto mb-2 opacity-40" />
                     <p className="text-sm">加载失败，请重试</p>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : data?.data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground text-sm">
+                <tr className="border-b transition-colors">
+                  <td colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground text-sm p-2 align-middle">
                     暂无数据
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 <>
                   {data?.data.map((row, idx) => {
                     const highlight = rowHighlight(row.edd);
                     return (
-                    <TableRow
+                    <tr
                       key={idx}
                       className={cn(
-                        "transition-colors",
+                        "border-b transition-colors",
                         highlight
                           ? highlight
                           : idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]",
                       )}
                     >
-                      <TableCell className="px-3 py-2.5 text-xs font-medium">{row.order_no}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.order_no}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">
                         {fmtDate(row.order_date)}
-                      </TableCell>
+                      </td>
                       {/* 预计交期：已拖期红色，临近交期琶珀色 */}
-                      <TableCell className={cn(
-                        "px-3 py-2.5 text-xs whitespace-nowrap",
+                      <td className={cn(
+                        "px-3 py-2.5 text-xs whitespace-nowrap p-2 align-middle",
                         (() => {
                           const r = daysUntilEdd(row.edd);
                           if (r === null) return "text-muted-foreground";
@@ -519,73 +517,73 @@ export default function EngPkgWip() {
                         })()
                       )}>
                         {fmtDate(row.edd)}
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs">{row.process_type}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.part_no}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs">{row.lot_no}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs font-medium">{row.label}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs">{row.package_type}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.order_qty)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.open_qty)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.before_attach)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.die_attach)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.wire_bond)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.molding)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.testing)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                      </td>
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.process_type}</td>
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.vendor_name}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.part_no}</td>
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.lot_no}</td>
+                      <td className="px-3 py-2.5 text-xs font-medium p-2 align-middle whitespace-nowrap">{row.label}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.vendor_part_no}</td>
+                      <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.package_type}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.order_qty)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.open_qty)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.before_attach)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.die_attach)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.wire_bond)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.molding)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.testing)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.test_done)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">
                         {fmtDateTime(row.update_time)}
-                      </TableCell>
+                      </td>
                       {/* 拖期天数：>0 才显示，红色加粗 */}
-                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">
                         {row.overdue_days > 0
                           ? <span className="text-red-600 font-semibold">{row.overdue_days}</span>
                           : ""}
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                     );
                   })}
 
                   {/* 合计行 */}
                   {data?.totalRow && (
-                    <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
-                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={6}>
+                    <tr className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
+                      <td className="px-3 py-3 font-bold text-xs text-primary p-2 align-middle" colSpan={6}>
                         合计
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-xs font-bold text-primary" colSpan={4} />
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-xs font-bold text-primary p-2 align-middle" colSpan={4} />
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.order_qty)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.open_qty)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.before_attach)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.die_attach)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.wire_bond)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.molding)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.testing)}
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold">
+                      </td>
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">
                         {fmtCell(data.totalRow.test_done)}
-                      </TableCell>
-                      <TableCell />
-                    </TableRow>
+                      </td>
+                      <td />
+                    </tr>
                   )}
                 </>
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
 
         {/* 分页 */}
