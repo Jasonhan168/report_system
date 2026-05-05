@@ -177,7 +177,7 @@ const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
   meta: {
     code: "outsource_order_detail",
     name: "委外订单明细表",
-    category: "生产报表",
+    category: "ERP报表",
     description: "按日期查询委外订单明细，received_rate<98为固定条件",
     route: "/reports/outsource-order-detail",
     icon: "ClipboardList",

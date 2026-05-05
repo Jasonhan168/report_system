@@ -144,7 +144,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions> = {
   meta: {
     code: "pkg_wip_inproc_detail",
     name: "封装厂在制品明细表",
-    category: "生产报表",
+    category: "封装厂报表",
     description: "封装厂在制品当前快照明细（来源：v_dws_ab_wip，带进度更新时间）",
     route: "/reports/pkg-wip-inproc-detail",
     icon: "List",

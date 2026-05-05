@@ -1,5 +1,5 @@
 /**
- * 原封装厂WIP明细表 —— 报表插件
+ * 封装厂WIP明细表 —— 报表插件
  *
  * 数据来源：v_dwd_ab_wip（DWD 明细，按日期筛选）
  */
@@ -138,8 +138,8 @@ async function queryExport(client: ClickHouseClient, input: Input): Promise<Row[
 const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
   meta: {
     code: "pkg_wip_detail",
-    name: "原封装厂WIP明细表",
-    category: "生产报表",
+    name: "封装厂WIP明细表",
+    category: "封装厂报表",
     description: "按日期查询封装厂WIP明细数据（来源：v_dwd_ab_wip）",
     route: "/reports/pkg-wip-detail",
     icon: "List",
@@ -171,11 +171,11 @@ const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
   emptyExportRows: [],
 
   excel: {
-    sheetName: "原封装厂WIP明细表",
-    title: (input) => `原封装厂WIP明细表  ${input.date || localToday()}`,
+    sheetName: "封装厂WIP明细表",
+    title: (input) => `封装厂WIP明细表  ${input.date || localToday()}`,
     filenameParts: (input) => {
       const d = input.date || localToday();
-      const parts = ["原封装厂WIP明细表", d];
+      const parts = ["封装厂WIP明细表", d];
       if (input.vendorName) parts.push(input.vendorName);
       else if (input.labelName) parts.push(input.labelName);
       return parts;
