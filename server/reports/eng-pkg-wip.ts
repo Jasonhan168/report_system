@@ -257,7 +257,7 @@ WHERE ${where}`;
 SELECT *
 FROM (${UNION_SQL})
 WHERE ${where}
-ORDER BY vendor_name, order_no, lot_no
+ORDER BY order_date DESC, order_no, lot_no
 LIMIT ${pageSize} OFFSET ${offset}`;
 
   const totalSql = `
