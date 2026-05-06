@@ -26,6 +26,7 @@ interface Row {
   label_name: string;
   vendor_part_no: string;
   vendor_name: string;
+  open_qty: number;
   unissued_qty: number;
   die_attach: number;
   wire_bond: number;
@@ -84,6 +85,7 @@ SELECT
     ifNull(ord.label, '')          AS label_name,
     ifNull(ord.vendor_part_no, '') AS vendor_part_no,
     ifNull(ord.vendor_name, '')    AS vendor_name,
+    ifNull(ord.open_qty, 0)  AS open_qty,
     (ifNull(ord.open_qty, 0)
      - ifNull(wip.die_attach, 0)
      - ifNull(wip.wire_bond, 0)
@@ -125,6 +127,7 @@ function toRow(r: Record<string, unknown>): Row {
     label_name: String(r.label_name ?? ""),
     vendor_part_no: String(r.vendor_part_no ?? ""),
     vendor_name: String(r.vendor_name ?? ""),
+    open_qty: Number(r.open_qty ?? 0),
     unissued_qty: Number(r.unissued_qty ?? 0),
     die_attach: Number(r.die_attach ?? 0),
     wire_bond: Number(r.wire_bond ?? 0),
@@ -156,6 +159,7 @@ FROM (
 SELECT
     arrayStringConcat(groupUniqArray(label_name), ',') AS label_name,
     vendor_part_no, vendor_name,
+    sum(open_qty)     AS open_qty,
     sum(unissued_qty) AS unissued_qty,
     sum(die_attach)   AS die_attach,
     sum(wire_bond)    AS wire_bond,
@@ -173,6 +177,7 @@ LIMIT ${pageSize} OFFSET ${offset}`;
 
   const totalSql = `
 SELECT
+    sum(open_qty)     AS open_qty,
     sum(unissued_qty) AS unissued_qty,
     sum(die_attach)   AS die_attach,
     sum(wire_bond)    AS wire_bond,
@@ -197,6 +202,7 @@ WHERE ${where}`;
     label_name: "合计",
     vendor_part_no: "",
     vendor_name: "",
+    open_qty: Number(t.open_qty ?? 0),
     unissued_qty: Number(t.unissued_qty ?? 0),
     die_attach: Number(t.die_attach ?? 0),
     wire_bond: Number(t.wire_bond ?? 0),
@@ -275,6 +281,7 @@ const plugin: ReportPlugin<
       label_name: "合计",
       vendor_part_no: "",
       vendor_name: "",
+      open_qty: 0,
       unissued_qty: 0,
       die_attach: 0,
       wire_bond: 0,
@@ -304,7 +311,9 @@ const plugin: ReportPlugin<
       { header: "标签品名",   width: 28, value: (r) => r.label_name },
       { header: "供应商料号", width: 18, value: (r) => r.vendor_part_no },
       { header: "供应商",     width: 18, value: (r) => r.vendor_name },
-      { header: "未回货数量", width: 12, value: (r) => r.unissued_qty,
+      { header: "未回货数量", width: 12, value: (r) => r.open_qty,
+        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.open_qty) || 0), 0) },
+      { header: "未投数量",   width: 12, value: (r) => r.unissued_qty,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.unissued_qty) || 0), 0) },
       { header: "装片",       width: 10, value: (r) => r.die_attach,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.die_attach) || 0), 0) },

@@ -295,8 +295,8 @@ export default function PkgWipInprocSummary() {
     );
   }
 
-  const COL_COUNT = 11;
-  const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
+  const COL_COUNT = 12;
+  const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
   const TODAY = localToday();
 
   return (
@@ -405,7 +405,7 @@ export default function PkgWipInprocSummary() {
                     key={h}
                     className={cn(
                       "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3",
-                      i >= 3 && i <= 9 && "text-right"
+                      i >= 3 && i <= 10 && "text-right"
                     )}
                   >
                     {h}
@@ -472,11 +472,14 @@ export default function PkgWipInprocSummary() {
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">
-                        {row.unissued_qty !== 0 ? (
+                        {rowAny.open_qty ? (
                           <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => drillTo("outsource_order_detail", "/reports/outsource-order-detail", outsourceParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
-                            {fmtCell(row.unissued_qty)}
+                            {fmtCell(rowAny.open_qty)}
                           </button>
                         ) : ""}
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {fmtCell(row.unissued_qty)}
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.die_attach)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.wire_bond)}</TableCell>
@@ -497,6 +500,7 @@ export default function PkgWipInprocSummary() {
                   {data?.totalRow && (
                     <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
                       <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={3}>合计</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell((data.totalRow as typeof data.totalRow & { open_qty?: number }).open_qty ?? 0)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.unissued_qty)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.die_attach)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.wire_bond)}</TableCell>
