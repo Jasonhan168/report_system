@@ -112,6 +112,6 @@ export interface ReportPlugin<
    */
   rowsForExcel?: (exported: ExportReturn) => Row[];
 
-  /** Excel 导出配置 */
-  excel: ExcelConfig<Row, Input>;
+  /** Excel 导出配置（支持函数形式：动态生成列配置） */
+  excel: ExcelConfig<Row, Input> | ((input: Input, exported: ExportReturn) => ExcelConfig<Row, Input>);
 }

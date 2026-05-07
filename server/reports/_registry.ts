@@ -18,6 +18,8 @@ import pkgWipDetail from "./pkg-wip-detail";
 import pkgWipInprocDetail from "./pkg-wip-inproc-detail";
 import pkgWipInprocSummary from "./pkg-wip-inproc-summary";
 import engPkgWip from "./eng-pkg-wip";
+import pkgUnissuedPivot from "./pkg-unissued-pivot";
+import orderWipDetail from "./order-wip-detail";
 
 /** 所有报表插件（顺序无意义，展示排序由 meta.sortOrder 决定） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,6 +30,8 @@ export const ALL_REPORTS: ReportPlugin<any, any, any, any, any, any>[] = [
   pkgWipInprocDetail,
   pkgWipInprocSummary,
   engPkgWip,
+  orderWipDetail,
+  pkgUnissuedPivot,
 ];
 
-export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail, pkgWipInprocSummary, engPkgWip };
+export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail, pkgWipInprocSummary, engPkgWip, orderWipDetail, pkgUnissuedPivot };

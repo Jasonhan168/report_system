@@ -161,7 +161,7 @@ export function registerExportRoutes(app: Router) {
         }
 
         const rows = extractRows(plugin, exported);
-        await renderExcel(plugin, rows, input, res);
+        await renderExcel(plugin, rows, input, res, exported);
       } catch (err) {
         success = false;
         errorMsg = err instanceof Error ? err.message : String(err);

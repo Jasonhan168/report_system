@@ -21,6 +21,8 @@ import {
   pkgWipInprocDetail,
   pkgWipInprocSummary,
   engPkgWip,
+  orderWipDetail,
+  pkgUnissuedPivot,
   ALL_REPORTS,
 } from "./reports/_registry";
 import { authenticate, hashPassword, verifyPassword } from "./auth";
@@ -453,6 +455,8 @@ export const appRouter = router({
   pkgWipInprocDetail:   makeReportRouter(pkgWipInprocDetail),
   pkgWipInprocSummary:  makeReportRouter(pkgWipInprocSummary),
   engPkgWip:            makeReportRouter(engPkgWip),
+  orderWipDetail:       makeReportRouter(orderWipDetail),
+  pkgUnissuedPivot:     makeReportRouter(pkgUnissuedPivot),
 });
 
 export type AppRouter = typeof appRouter;

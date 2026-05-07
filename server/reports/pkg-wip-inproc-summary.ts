@@ -110,10 +110,10 @@ LEFT JOIN v_dws_ab_wip_agg AS wip
 WHERE ord.date = today()`;
 
 function buildWhere(p: Input): string {
-  const conds: string[] = ["1 = 1"];
+  const conds: string[] = [];
   if (p.labelName) conds.push(`lower(label_name) LIKE lower('%${esc(p.labelName)}%')`);
   if (p.vendorName) conds.push(`lower(vendor_name) LIKE lower('%${esc(p.vendorName)}%')`);
-  return conds.join(" AND ");
+  return conds.length ? "WHERE " + conds.join(" AND ") : "";
 }
 
 function toRow(r: Record<string, unknown>): Row {
@@ -151,7 +151,7 @@ SELECT count() AS cnt
 FROM (
   SELECT vendor_part_no, vendor_name
   FROM (${INNER_SQL})
-  WHERE ${where}
+  ${where}
   GROUP BY vendor_part_no, vendor_name
 )`;
 
@@ -169,8 +169,10 @@ SELECT
     sum(wip_qty)      AS wip_qty,
     groupUniqArray(order_no) AS order_nos,
     toString(max(update_time)) AS update_time
-FROM (${INNER_SQL})
-WHERE ${where}
+FROM (
+  SELECT * FROM (${INNER_SQL})
+  ${where}
+)
 GROUP BY vendor_part_no, vendor_name
 ORDER BY vendor_name, vendor_part_no
 LIMIT ${pageSize} OFFSET ${offset}`;
@@ -186,8 +188,10 @@ SELECT
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty,
     toString(max(update_time)) AS update_time
-FROM (${INNER_SQL})
-WHERE ${where}`;
+FROM (
+  SELECT * FROM (${INNER_SQL})
+  ${where}
+)`;
 
   const [countR, dataR, totalR] = await Promise.all([
     client.query({ query: countSql, format: "JSONEachRow" }).then((r) => r.json<{ cnt: string }>()),

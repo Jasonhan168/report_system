@@ -11,7 +11,7 @@
  */
 import type { Response } from "express";
 import ExcelJS from "exceljs";
-import type { ExcelColumn, ReportPlugin } from "./_types";
+import type { ExcelColumn, ExcelConfig, ReportPlugin } from "./_types";
 
 /** A=0, B=1, ..., AA=26 ... 转 Excel 列字母 */
 function colLetter(index: number): string {
@@ -30,13 +30,17 @@ function hasTotalRow<Row>(columns: ExcelColumn<Row>[]): boolean {
   return columns.some((c) => typeof c.totalValue === "function");
 }
 
-export async function renderExcel<Row, Input>(
-  plugin: ReportPlugin<Row, Input, unknown, unknown, unknown, unknown>,
+export async function renderExcel<Row, Input, ExportReturn>(
+  plugin: ReportPlugin<Row, Input, unknown, unknown, unknown, ExportReturn>,
   rows: Row[],
   input: Input,
   res: Response,
+  exported?: ExportReturn,
 ): Promise<void> {
-  const { excel, meta } = plugin;
+  const { meta } = plugin;
+  const excel: ExcelConfig<Row, Input> = typeof plugin.excel === "function" && exported
+    ? (plugin.excel as (input: Input, exported: ExportReturn) => ExcelConfig<Row, Input>)(input, exported)
+    : plugin.excel as ExcelConfig<Row, Input>;
   const columns = excel.columns;
   const lastColLetter = colLetter(columns.length - 1);
   const leftAlignCols = excel.leftAlignCols ?? 0;

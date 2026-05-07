@@ -442,10 +442,10 @@ export default function PkgWipInprocSummary() {
                       ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
                       ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
                     };
-                    // 跳转封装厂在制品明细表（点击在制品总数）
+                    // 跳转封装在制品明细表（点击在制品总数）
                     // 注：汇总表已按 vendor_part_no + vendor_name 分组，label_name 为拼接值
-                    //       传给明细表做 LIKE 过滤会导致无匹配，故不传 labelName
-                    const inprocDetailParams = new URLSearchParams({
+                    //       传给明细表做 = 精确匹配会导致无匹配，故不传 label
+                    const orderWipDetailParams = new URLSearchParams({
                       ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
                       ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
                       fromSummary: "1",
@@ -488,7 +488,7 @@ export default function PkgWipInprocSummary() {
                       <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs font-semibold">
                         {rowAny.wip_qty && rowAny.wip_qty !== 0 ? (
-                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => drillTo("pkg_wip_inproc_detail", "/reports/pkg-wip-inproc-detail", inprocDetailParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
+                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => drillTo("order_wip_detail", "/reports/order-wip-detail", orderWipDetailParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
                             {fmtCell(rowAny.wip_qty)}
                           </button>
                         ) : ""}
