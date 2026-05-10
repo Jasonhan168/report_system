@@ -1,5 +1,6 @@
 import { eq, and, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createPool } from "mysql2/promise";
 import {
   users, datasources, reportModules, reportPermissions, systemConfigs, operationLogs,
   InsertUser, InsertDatasource, InsertReportModule, InsertReportPermission, InsertSystemConfig,
@@ -9,16 +10,42 @@ import { ENV } from "./_core/env";
 import { ALL_REPORTS } from "./reports/_registry";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _initPromise: Promise<void> | null = null;
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (_db) return _db;
+
+  if (_initPromise) {
+    await _initPromise;
+    return _db;
+  }
+
+  if (!process.env.DATABASE_URL) return null;
+
+  _initPromise = (async () => {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const client = createPool({
+        uri: process.env.DATABASE_URL,
+        timezone: "Z",
+      });
+      // Drizzle ORM 对 TIMESTAMP 使用自定义 typeCast(field.string())，然后
+      // mapFromDriverValue 把字符串硬拼 +0000 当作 UTC 解析。
+      // 但 mysql2 的 timezone 选项只会影响驱动端 Date 解析，不会改变 MySQL
+      // 会话时区，因此 field.string() 返回的仍是服务器本地时区（CST）字符串。
+      // 必须在连接建立后强制把会话时区设为 UTC，才能保证字符串是 UTC 时间。
+      (client as any).on("connection", (connection: any) => {
+        connection.query("SET time_zone = '+00:00'", (err: any) => {
+          if (err) console.error("[DB] Failed to set time_zone:", err);
+        });
+      });
+      _db = drizzle({ client });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
-  }
+  })();
+
+  await _initPromise;
   return _db;
 }
 
