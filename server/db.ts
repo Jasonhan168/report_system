@@ -319,7 +319,7 @@ export async function listOperationLogs(opts: ListOperationLogOptions = {}) {
   }
   
   // 过滤掉管理员用户和jason_han用户的操作记录
-  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR name = 'jason_han')`);
+  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han')`);
   
   const whereExpr = conditions.length ? and(...conditions) : undefined;
 
@@ -360,7 +360,7 @@ export async function listOperationLogsForExport(
   }
   
   // 过滤掉管理员用户和jason_han用户的操作记录
-  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR name = 'jason_han')`);
+  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han')`);
   
   const whereExpr = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(50000, Math.max(1, opts.limit ?? 10000));
