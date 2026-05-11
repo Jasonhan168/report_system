@@ -84,12 +84,21 @@ export async function renderExcel<Row, Input, ExportReturn>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dataRow.eachCell((cell: any, colNum: number) => {
       const colCfg = columns[colNum - 1];
+      const isNumeric = typeof cell.value === "number" && Number.isFinite(cell.value);
+      // 数字单元格：千分位格式 + 默认靠右；非数字沿用原对齐规则
       const align =
         colCfg?.align ??
-        (colNum <= leftAlignCols ? "left" : "center");
+        (isNumeric
+          ? "right"
+          : colNum <= leftAlignCols
+            ? "left"
+            : "center");
       cell.font = { size: 10, name: "微软雅黑" };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
       cell.alignment = { horizontal: align, vertical: "middle" };
+      if (isNumeric) {
+        cell.numFmt = Number.isInteger(cell.value) ? "#,##0" : "#,##0.##";
+      }
       cell.border = {
         top: { style: "hair", color: { argb: "FFE0E8F0" } },
         bottom: { style: "hair", color: { argb: "FFE0E8F0" } },
@@ -109,10 +118,17 @@ export async function renderExcel<Row, Input, ExportReturn>(
     const sumRow = ws.addRow(totalVals);
     sumRow.height = 20;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sumRow.eachCell((cell: any) => {
+    sumRow.eachCell((cell: any, colNum: number) => {
+      const colCfg = columns[colNum - 1];
+      const isNumeric = typeof cell.value === "number" && Number.isFinite(cell.value);
+      // 合计行数字同样千分位 + 靠右；文本（如"合计"）仍居中
+      const align = colCfg?.align ?? (isNumeric ? "right" : "center");
       cell.font = { bold: true, size: 10, name: "微软雅黑" };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF5" } };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.alignment = { horizontal: align, vertical: "middle" };
+      if (isNumeric) {
+        cell.numFmt = Number.isInteger(cell.value) ? "#,##0" : "#,##0.##";
+      }
       cell.border = {
         top: { style: "thin", color: { argb: "FF1E3A5F" } },
         bottom: { style: "thin", color: { argb: "FF1E3A5F" } },

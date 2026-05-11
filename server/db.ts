@@ -317,6 +317,10 @@ export async function listOperationLogs(opts: ListOperationLogOptions = {}) {
     const like = `%${opts.keyword}%`;
     conditions.push(sql`(${operationLogs.userName} LIKE ${like} OR ${operationLogs.userOpenId} LIKE ${like} OR ${operationLogs.resourceName} LIKE ${like})`);
   }
+  
+  // 过滤掉管理员用户和jason_han用户的操作记录
+  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR name = 'jason_han')`);
+  
   const whereExpr = conditions.length ? and(...conditions) : undefined;
 
   const page = Math.max(1, opts.page ?? 1);
@@ -354,6 +358,10 @@ export async function listOperationLogsForExport(
     const like = `%${opts.keyword}%`;
     conditions.push(sql`(${operationLogs.userName} LIKE ${like} OR ${operationLogs.userOpenId} LIKE ${like} OR ${operationLogs.resourceName} LIKE ${like})`);
   }
+  
+  // 过滤掉管理员用户和jason_han用户的操作记录
+  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR name = 'jason_han')`);
+  
   const whereExpr = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(50000, Math.max(1, opts.limit ?? 10000));
 
