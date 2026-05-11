@@ -1,9 +1,9 @@
 # 报表查询系统 - 完整需求文档
 
 **项目名称**：报表查询系统（Report Query System）  
-**最后更新**：2026年4月21日  
-**版本**：v1.0.0  
-**状态**：已完成
+**最后更新**：2026年5月10日  
+**版本**：v2.0.0（dev分支）  
+**状态**：持续开发中
 
 ---
 
@@ -17,6 +17,7 @@
 6. [API 接口](#api-接口)
 7. [前端功能](#前端功能)
 8. [优化清单](#优化清单)
+9. [版本更新日志](#版本更新日志)
 
 ---
 
@@ -24,7 +25,7 @@
 
 ### 项目背景
 
-报表查询系统是一个企业级报表管理平台，用于集中管理和查询各类生产报表（如封装厂WIP汇总表、委外订单明细表等）。系统支持多数据源接入（ClickHouse、MySQL、Oracle）、灵活的权限控制、以及Excel导出功能。
+报表查询系统是一个企业级报表管理平台，用于集中管理和查询各类生产报表（如封装厂WIP汇总表、委外订单明细表、工程批封装在制品报表等）。系统支持多数据源接入（ClickHouse、MySQL、Oracle）、灵活的权限控制、操作日志审计、以及Excel导出功能。
 
 ### 核心目标
 
@@ -32,6 +33,7 @@
 - **灵活查询**：支持多维度筛选、分页查询、实时数据聚合
 - **数据导出**：支持Excel导出，格式严格对齐业务模板
 - **权限控制**：细粒度权限管理（用户×模块×操作）
+- **审计追踪**：记录用户的所有操作日志，支持查询和分析
 - **可扩展性**：模块化架构，新增报表模块无需修改核心代码
 
 ---
@@ -64,6 +66,7 @@
 | **实时过滤选项** | 筛选条件下拉框实时更新，支持模糊搜索 |
 | **分页查询** | 支持分页显示，每页条数可配置 |
 | **合计行** | 自动计算数值列的合计值 |
+| **筛选锁定** | 从其他报表跳转时支持锁定筛选条件，防止误操作 |
 
 ### 4. 数据导出
 
@@ -73,6 +76,14 @@
 | **文件命名** | 导出文件名包含日期和筛选条件，便于区分 |
 | **权限验证** | 导出前验证用户权限 |
 | **列头对齐** | 导出列头与页面显示保持一致 |
+
+### 5. 操作日志审计
+
+| 功能 | 说明 |
+|---|---|
+| **操作记录** | 记录用户的查询、导出等操作，包含时间、用户、操作类型、报表模块等 |
+| **日志查询** | 支持按用户、时间、操作类型等条件查询操作日志 |
+| **审计报告** | 生成用户操作统计报告 |
 
 ---
 
@@ -92,6 +103,7 @@
 | **筛选条件** | 日期（默认当天）、标签品名、委外厂商、工程量产、分公司 |
 | **显示列** | 日期、标签品名、委外厂商、工程量产、未投数量、未回货数量、合计WIP数量、WIP明细 |
 | **超链接** | 未回货数量→委外订单明细表；合计WIP数量→WIP明细表 |
+| **订单过滤** | 点击超链接跳转时，明细表仅显示该行关联的订单号 |
 | **导出** | Excel格式，包含未回货数量列，自动计算合计行 |
 
 #### 数据聚合
@@ -157,6 +169,89 @@ const overdueDays = Math.max(0, Math.floor((today - eddDate) / (1000 * 60 * 60 *
 const totalWip = die_attach + wire_bond + molding + testing + test_done;
 ```
 
+### 4. 封装厂在制品汇总表（新增）
+
+**模块代码**：`pkg_wip_inproc_summary`  
+**分类**：封装厂报表  
+**数据源**：ClickHouse/Mock  
+**权限**：查看、导出
+
+#### 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| **筛选条件** | 日期（默认当天）、标签品名、委外厂商、工程量产 |
+| **显示列** | 日期、标签品名、委外厂商、工程量产、装片、焊线、塑封、测试、测试后、合计WIP数量 |
+| **数据来源** | v_dws_ab_wip（DWS 层汇总视图，无日期维度） |
+| **导出** | Excel格式，自动计算合计行 |
+
+### 5. 封装厂在制品明细表（新增）
+
+**模块代码**：`pkg_wip_inproc_detail`  
+**分类**：生产报表  
+**数据源**：ClickHouse/Mock  
+**权限**：查看、导出
+
+#### 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| **筛选条件** | 委外厂商、标签品名、供应商料号 |
+| **显示列** | 委外厂商、订单号、标签品名、供应商料号、批号、装片、焊线、塑封、测试、测试后、合计WIP数量、进度更新时间 |
+| **过滤条件** | 合计WIP数量 > 0 |
+| **数据来源** | v_dws_ab_wip（实时进度数据） |
+| **导出** | Excel格式 |
+
+### 6. 工程批封装在制品报表（新增）
+
+**模块代码**：`eng_pkg_wip`  
+**分类**：工程报表  
+**数据源**：ClickHouse/Mock  
+**权限**：查看、导出
+
+#### 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| **筛选条件** | 下单日期范围、工程批号、工程产品名称 |
+| **显示列** | 下单日期、工程批号、工程产品名称、工程数量、预计交期、拖期天数、装片、焊线、塑封、测试、测试后、合计WIP数量 |
+| **预警高亮** | 拖期行红色背景，临近交期（≤5天）黄色背景 |
+| **表头固定** | 上下滚动时表头保持可见 |
+| **排序** | 数据按下单日期降序排序 |
+| **导出** | Excel格式，包含预计交期和拖期天数列 |
+
+### 7. 封装订单未投统计表（新增）
+
+**模块代码**：`pkg_unissued_pivot`  
+**分类**：生产报表  
+**数据源**：ClickHouse/Mock  
+**权限**：查看、导出
+
+#### 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| **筛选条件** | 日期范围、工程批号、工程产品名称 |
+| **显示列** | 工程批号、工程产品名称、未投数量、已投数量、总订单数 |
+| **数据聚合** | 按工程批号和产品名称聚合未投统计 |
+| **导出** | Excel格式 |
+
+### 8. 订单在制品明细表（新增）
+
+**模块代码**：`order_wip_detail`  
+**分类**：生产报表  
+**数据源**：ClickHouse/Mock  
+**权限**：查看、导出
+
+#### 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| **筛选条件** | 日期、工程批号、工程产品名称、供应商 |
+| **显示列** | 订单号、工程批号、工程产品名称、供应商、装片、焊线、塑封、测试、测试后、合计WIP数量 |
+| **数据来源** | 订单级别的在制品数据 |
+| **导出** | Excel格式 |
+
 ---
 
 ## 技术架构
@@ -189,7 +284,7 @@ const totalWip = die_attach + wire_bond + molding + testing + test_done;
 
 | 类型 | 用途 |
 |---|---|
-| MySQL/TiDB | 系统数据（用户、权限、配置） |
+| MySQL/TiDB | 系统数据（用户、权限、配置、操作日志） |
 | ClickHouse | 报表数据（WIP、订单等） |
 
 ---
@@ -209,7 +304,7 @@ CREATE TABLE users (
   role ENUM('admin', 'user') DEFAULT 'user',
   isActive BOOLEAN DEFAULT TRUE,
   department VARCHAR(255),
-  passwordHash VARCHAR(255),  -- 本地认证时使用
+  passwordHash VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -242,6 +337,23 @@ CREATE TABLE report_permissions (
   module_id INT,
   canView BOOLEAN DEFAULT FALSE,
   canExport BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (module_id) REFERENCES report_modules(id)
+);
+```
+
+#### operation_logs（操作日志表）
+
+```sql
+CREATE TABLE operation_logs (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT,
+  module_id INT,
+  operation_type VARCHAR(50),
+  operation_details JSON,
+  ip_address VARCHAR(45),
+  user_agent TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (module_id) REFERENCES report_modules(id)
@@ -297,30 +409,13 @@ CREATE TABLE datasources (
 **输入参数**：
 ```typescript
 {
-  date: string;           // YYYY-MM-DD
+  date: string;
   labelName?: string;
   vendorName?: string;
   productionType?: string;
   plant?: string;
   page: number;
   pageSize: number;
-}
-```
-
-**返回数据**：
-```typescript
-{
-  rows: Array<{
-    date: string;
-    label_name: string;
-    vendor_name: string;
-    production_type: string;
-    uninvested_qty: number;
-    open_qty: number;
-    total_wip: number;
-    order_nos: string[];
-  }>;
-  total: number;
 }
 ```
 
@@ -336,7 +431,7 @@ CREATE TABLE datasources (
   vendorPartNo?: string;
   plant?: string;
   productionType?: string;
-  orderNos?: string[];      // 从汇总表跳转时传入
+  orderNos?: string[];
   page: number;
   pageSize: number;
 }
@@ -357,26 +452,34 @@ CREATE TABLE datasources (
 }
 ```
 
+#### tRPC: engPkgWip.query
+查询工程批封装在制品报表
+
+**输入参数**：
+```typescript
+{
+  startDate: string;
+  endDate: string;
+  engBatchNo?: string;
+  engProductName?: string;
+  page: number;
+  pageSize: number;
+}
+```
+
 ### 导出接口
 
 #### GET /api/export/pkg-wip-summary
 导出WIP汇总表为Excel
 
-**查询参数**：
-```
-?date=2026-04-21&labelName=&vendorName=供应商A
-```
-
 #### GET /api/export/outsource-order-detail
 导出委外订单明细表为Excel
 
-**查询参数**：
-```
-?date=2026-04-21&orderNos=A001&orderNos=A002
-```
-
 #### GET /api/export/pkg-wip-detail
 导出WIP明细表为Excel
+
+#### GET /api/export/eng-pkg-wip
+导出工程批封装在制品报表为Excel
 
 ---
 
@@ -391,12 +494,18 @@ CREATE TABLE datasources (
 ├── /reports/
 │   ├── pkg-wip-summary            # 封装厂WIP汇总表
 │   ├── outsource-order-detail     # 委外订单明细表
-│   └── pkg-wip-detail             # 封装厂WIP明细表
+│   ├── pkg-wip-detail             # 封装厂WIP明细表
+│   ├── pkg-wip-inproc-summary     # 封装厂在制品汇总表
+│   ├── pkg-wip-inproc-detail      # 封装厂在制品明细表
+│   ├── eng-pkg-wip                # 工程批封装在制品报表
+│   ├── pkg-unissued-pivot         # 封装订单未投统计表
+│   └── order-wip-detail           # 订单在制品明细表
 └── /admin/
     ├── users                       # 用户管理
     ├── datasources                 # 数据源配置
     ├── report-modules              # 报表模块管理
     ├── report-permissions          # 权限配置
+    ├── operation-logs              # 操作日志
     └── system-config               # 系统配置
 ```
 
@@ -415,12 +524,14 @@ CREATE TABLE datasources (
 - **合计行**：表格底部自动计算数值列合计
 - **超链接**：支持跳转到其他报表
 - **预警高亮**：根据数据状态显示不同背景色
+- **固定表头**：上下滚动时表头保持可见（工程批报表）
 
 #### 3. 导出功能
 
 - **Excel导出**：生成格式化的Excel文件
 - **文件命名**：包含日期和筛选条件
 - **权限验证**：导出前检查用户权限
+- **合计行**：导出文件包含合计行
 
 #### 4. 导航与交互
 
@@ -476,6 +587,59 @@ CREATE TABLE datasources (
 | 订单过滤 | WIP汇总表跳转委外订单时仅显示该行订单号 |
 | 过滤恢复 | 返回汇总表时保持原有过滤条件（日期、标签、供应商） |
 | 后端支持 | 后端新增order_nos参数支持精确过滤 |
+
+### 第六阶段（2026-04-30 - 2026-05-10，dev分支）
+
+| 优化项 | 说明 |
+|---|---|
+| 新增在制品汇总表 | 新增封装厂在制品汇总表（pkg_wip_inproc_summary） |
+| 新增在制品明细表 | 新增封装厂在制品明细表（pkg_wip_inproc_detail） |
+| 新增工程批报表 | 新增工程批封装在制品报表（eng_pkg_wip），包含预计交期和拖期预警 |
+| 表头固定优化 | 工程批报表实现表头固定，上下滚动时表头保持可见 |
+| 布局自适应 | 工程批报表页面自适应浏览器高度，垂直滚动仅在表格内部 |
+| 时区修复 | 修复全项目报表默认日期在凌晨显示前一天的时区问题 |
+| 新增未投统计 | 新增封装订单未投统计表（pkg_unissued_pivot） |
+| 新增订单明细 | 新增订单在制品明细表（order_wip_detail） |
+| 操作日志 | 新增操作日志管理功能，记录用户的查询、导出等操作 |
+| 日志查询 | 支持按用户、时间、操作类型等条件查询操作日志 |
+
+---
+
+## 版本更新日志
+
+### v2.0.0（dev分支，2026-05-10）
+
+**新增功能**：
+- ✓ 新增4个报表模块（在制品汇总、在制品明细、工程批、未投统计、订单明细）
+- ✓ 操作日志审计功能
+- ✓ 表头固定优化（工程批报表）
+- ✓ 时区问题修复
+
+**优化改进**：
+- ✓ 工程批报表字段显示顺序调整
+- ✓ 工程批报表数据按下单日期降序排序
+- ✓ 修复sticky表头在某些浏览器失效的问题
+- ✓ 页面自适应浏览器高度
+
+**bug修复**：
+- ✓ 修复用户操作日志时间显示问题
+- ✓ 修复全项目报表默认日期时区问题
+
+### v1.0.0（main分支，2026-04-21）
+
+**核心功能**：
+- ✓ 3个报表模块（WIP汇总、委外订单、WIP明细）
+- ✓ 用户认证与授权
+- ✓ 报表权限管理
+- ✓ Excel导出功能
+- ✓ 报表间跳转与过滤联动
+- ✓ 交期预警高亮
+
+**优化特性**：
+- ✓ 6阶段UI/功能优化
+- ✓ 来源标签与筛选锁定
+- ✓ 返回按钮保持过滤条件
+- ✓ 后端精确过滤支持
 
 ---
 
@@ -571,15 +735,21 @@ A: 检查用户是否有导出权限，以及数据源是否正常连接。查�
 
 A: 设置 `AUTH_MODE=ldap`，配置 `LDAP_URL` 和 `LDAP_BASE_DN` 环境变量，重启应用。
 
+### Q: 如何查看操作日志？
+
+A: 登录后进入"系统管理"→"操作日志"，可按用户、时间、操作类型等条件查询。
+
 ---
 
-## 版本历史
+## 分支说明
 
-| 版本 | 日期 | 主要变更 |
+| 分支 | 说明 | 状态 |
 |---|---|---|
-| v1.0.0 | 2026-04-21 | 初始版本发布，包含3个报表模块、权限管理、Excel导出等核心功能 |
+| **main** | 稳定版本，v1.0.0 | 生产就绪 |
+| **dev** | 开发版本，v2.0.0 | 持续开发 |
 
 ---
 
 **文档维护**：报表查询系统开发团队  
-**最后更新**：2026年4月21日
+**最后更新**：2026年5月10日  
+**版本**：v2.0.0
