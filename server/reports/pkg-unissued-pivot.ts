@@ -35,6 +35,7 @@ export interface PivotRow {
 /** 查询输入 */
 interface Input {
   packageType?: string;
+  productionType?: string;
   page?: number;
   pageSize?: number;
 }
@@ -42,6 +43,7 @@ interface Input {
 /** 筛选项 */
 interface FilterOptions {
   packageTypes: string[];
+  productionTypes: string[];
 }
 
 /** query 返回 */
@@ -87,6 +89,9 @@ function buildWhere(input: Input): string {
   const conds: string[] = [];
   if (input.packageType) {
     conds.push(`lower(package_type) LIKE lower('%${esc(input.packageType)}%')`);
+  }
+  if (input.productionType) {
+    conds.push(`production_type = '${esc(input.productionType)}'`);
   }
   return conds.length ? `AND ${conds.join(" AND ")}` : "";
 }
@@ -172,16 +177,26 @@ async function queryData(client: ClickHouseClient, input: Input): Promise<QueryR
 }
 
 async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
-  const sql = `
+  const ptSql = `
     SELECT DISTINCT package_type
     FROM v_dwd_order_wip
     WHERE package_type != ''
     ORDER BY package_type
   `;
-  const raw = await client
-    .query({ query: sql, format: "JSONEachRow" })
-    .then((r) => r.json<{ package_type: string }>());
-  return { packageTypes: raw.map((r) => r.package_type).filter(Boolean) };
+  const prodSql = `
+    SELECT DISTINCT production_type
+    FROM v_dwd_order_wip
+    WHERE production_type != ''
+    ORDER BY production_type
+  `;
+  const [ptR, prodR] = await Promise.all([
+    client.query({ query: ptSql, format: "JSONEachRow" }).then((r) => r.json<{ package_type: string }>()),
+    client.query({ query: prodSql, format: "JSONEachRow" }).then((r) => r.json<{ production_type: string }>()),
+  ]);
+  return {
+    packageTypes: ptR.map((r) => r.package_type).filter(Boolean),
+    productionTypes: prodR.map((r) => r.production_type).filter(Boolean),
+  };
 }
 
 async function queryExport(client: ClickHouseClient, input: Input): Promise<ExportReturn> {
@@ -229,6 +244,7 @@ function makeExcelConfig(vendors: string[]): ExcelConfig<PivotRow, Input> {
     filenameParts: (input) => {
       const parts = ["封装订单未投数量统计表", localToday()];
       if (input.packageType) parts.push(input.packageType);
+      if (input.productionType) parts.push(input.productionType);
       return parts;
     },
     leftAlignCols: 1,
@@ -258,11 +274,13 @@ const plugin: ReportPlugin<
 
   inputSchema: z.object({
     packageType: z.string().optional(),
+    productionType: z.string().optional(),
     page: z.number().min(1).default(1),
     pageSize: z.number().min(1).max(200).default(50),
   }),
   exportInputSchema: z.object({
     packageType: z.string().optional(),
+    productionType: z.string().optional(),
   }),
   filterOptionsInputSchema: undefined,
 
@@ -278,7 +296,7 @@ const plugin: ReportPlugin<
     grandTotal: 0,
     total: 0,
   },
-  emptyFilterOptions: { packageTypes: [] },
+  emptyFilterOptions: { packageTypes: [], productionTypes: [] },
 
   rowsForExcel: (exported) => exported.rows,
 

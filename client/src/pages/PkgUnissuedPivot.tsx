@@ -25,17 +25,23 @@ export default function PkgUnissuedPivot() {
   // 从 URL 读取返回时恢复的筛选条件
   const initParams = new URLSearchParams(window.location.search);
   const initPackageType = initParams.get("pivotPackageType") || "";
+  const initProductionType = initParams.get("pivotProductionType") || "";
 
   const [packageType, setPackageType] = useState(initPackageType);
+  const [productionType, setProductionType] = useState(initProductionType);
   const [pageSize, setPageSize] = useState(50);
 
   const [queryParams, setQueryParams] = useState({
-    packageType: initPackageType, page: 1, pageSize: 50,
+    packageType: initPackageType, productionType: initProductionType, page: 1, pageSize: 50,
   });
 
   const { data: viewPerm } = trpc.pkgUnissuedPivot.checkPermission.useQuery({ type: "view" });
   const { data: exportPerm } = trpc.pkgUnissuedPivot.checkPermission.useQuery({ type: "export" });
   const { data: moduleMeta } = trpc.reportModules.getByCode.useQuery({ code: "pkg_unissued_pivot" });
+  const { data: filterOpts } = trpc.pkgUnissuedPivot.filterOptions.useQuery(
+    undefined,
+    { enabled: !!viewPerm?.allowed },
+  );
   const logClient = trpc.operationLogs.logClient.useMutation();
 
   // 下钻时记录日志并跳转
@@ -57,8 +63,8 @@ export default function PkgUnissuedPivot() {
   );
 
   const handleSearch = useCallback(() => {
-    setQueryParams({ packageType, page: 1, pageSize });
-  }, [packageType, pageSize]);
+    setQueryParams({ packageType, productionType, page: 1, pageSize });
+  }, [packageType, productionType, pageSize]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setQueryParams((prev) => ({ ...prev, page: newPage }));
@@ -78,6 +84,7 @@ export default function PkgUnissuedPivot() {
     try {
       const params = new URLSearchParams({
         ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
+        ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
       });
       const resp = await fetch(`/api/export/pkg-unissued-pivot?${params.toString()}`);
       if (!resp.ok) {
@@ -95,6 +102,7 @@ export default function PkgUnissuedPivot() {
       a.href = url;
       const nameParts = ["封装订单未投数量统计表", localToday()];
       if (queryParams.packageType) nameParts.push(queryParams.packageType);
+      if (queryParams.productionType) nameParts.push(queryParams.productionType);
       a.download = `${nameParts.join("_")}.xlsx`;
       document.body.appendChild(a);
       a.click();
@@ -161,6 +169,22 @@ export default function PkgUnissuedPivot() {
               placeholder="全部"
               className="h-9 text-sm"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">
+              工程/量产
+            </Label>
+            <select
+              value={productionType}
+              onChange={(e) => setProductionType(e.target.value)}
+              className="h-9 w-full text-sm rounded-md border border-border bg-background px-3 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">全部</option>
+              {(filterOpts?.productionTypes ?? []).map((pt) => (
+                <option key={pt} value={pt}>{pt}</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-end">
@@ -247,6 +271,7 @@ export default function PkgUnissuedPivot() {
                     // 返回统计表时恢复筛选用的参数
                     const pivotBack = {
                       ...(queryParams.packageType ? { pivotPackageType: queryParams.packageType } : {}),
+                      ...(queryParams.productionType ? { pivotProductionType: queryParams.productionType } : {}),
                     };
                     return (
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
@@ -263,11 +288,12 @@ export default function PkgUnissuedPivot() {
                                   const detailParams = new URLSearchParams({
                                     vendorName: v,
                                     packageType: row.packageType,
+                                    ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
                                     fromPivot: "1",
                                     backRoute: "/reports/pkg-unissued-pivot",
                                     ...pivotBack,
                                   }).toString();
-                                  drillTo("order_wip_detail", "/reports/order-wip-detail", detailParams, { vendorName: v, packageType: row.packageType });
+                                  drillTo("order_wip_detail", "/reports/order-wip-detail", detailParams, { vendorName: v, packageType: row.packageType, productionType: queryParams.productionType || undefined });
                                 }}
                               >
                                 {fmtCell(qty)}
