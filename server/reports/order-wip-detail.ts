@@ -181,69 +181,51 @@ function toRow(r: Record<string, unknown>): Row {
 }
 
 // ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
-// 优化策略：
-//   1) query：将 count + data + sum 三条 SQL 合并为单次 HTTP 调用（UNION ALL），
-//      数据行带 _kind='data'，元信息行带 _kind='meta'（包含总行数 _cnt 与各列 sum/max）。
+// 策略说明：
+//   1) query：数据分页 + 统计(count/sum)拆分为两条独立 SQL 并行执行，
+//      规避 ClickHouse 18.16.1 UNION ALL 中 count() 在 WHERE 生效时返回 0 的兼容问题。
 //   2) filterOptions：用 groupUniqArrayIf 单次扫描即可一次性聚合 6 个字段的去重列表。
 async function queryData(client: ClickHouseClient, input: Input): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
 
-  // 单次 HTTP：分页数据行 + 元信息行（count、各列 sum、max(update_time)）
-  // 通过 _kind 字段区分两类行；data 分支的 ORDER BY/LIMIT 在子查询括号内保留
-  const sql = `
-(
-  SELECT
-    'data' AS _kind,
-    order_no, order_date, edd, process_type, production_type,
-    vendor_name, part_no, lot_no, label, vendor_part_no, package_type,
-    order_qty, open_qty, die_attach, wire_bond, molding, testing, test_done,
-    plant, update_time,
-    toUInt64(0) AS _cnt
-  FROM (${BASE_SQL})
-  WHERE ${where}
-  ORDER BY order_date DESC, order_no, lot_no
-  LIMIT ${pageSize} OFFSET ${offset}
-)
-UNION ALL
-(
-  SELECT
-    'meta' AS _kind,
-    ''                          AS order_no,
-    ''                          AS order_date,
-    ''                          AS edd,
-    ''                          AS process_type,
-    ''                          AS production_type,
-    ''                          AS vendor_name,
-    ''                          AS part_no,
-    ''                          AS lot_no,
-    ''                          AS label,
-    ''                          AS vendor_part_no,
-    ''                          AS package_type,
-    toInt64(sum(order_qty))     AS order_qty,
-    toInt64(sum(open_qty))      AS open_qty,
-    toInt64(sum(die_attach))    AS die_attach,
-    toInt64(sum(wire_bond))     AS wire_bond,
-    toInt64(sum(molding))       AS molding,
-    toInt64(sum(testing))       AS testing,
-    toInt64(sum(test_done))     AS test_done,
-    ''                          AS plant,
-    toString(max(update_time))  AS update_time,
-    toUInt64(count())           AS _cnt
-  FROM (${BASE_SQL})
-  WHERE ${where}
-)`;
+  // ClickHouse 18.16.1 UNION ALL 中 count() 在 WHERE 条件生效时返回 0 的兼容性问题，
+  // 因此将数据查询和统计查询拆分为两条独立 SQL 执行。
+  const dataSql = `
+SELECT
+  order_no, order_date, edd, process_type, production_type,
+  vendor_name, part_no, lot_no, label, vendor_part_no, package_type,
+  order_qty, open_qty, die_attach, wire_bond, molding, testing, test_done,
+  plant, update_time
+FROM (${BASE_SQL})
+WHERE ${where}
+ORDER BY order_date DESC, order_no, lot_no
+LIMIT ${pageSize} OFFSET ${offset}`;
 
-  const allR = await client
-    .query({ query: sql, format: "JSONEachRow" })
-    .then((r) => r.json<Record<string, unknown> & { _kind: string; _cnt: string | number }>());
+  const metaSql = `
+SELECT
+  count()                     AS _cnt,
+  toInt64(sum(order_qty))     AS order_qty,
+  toInt64(sum(open_qty))      AS open_qty,
+  toInt64(sum(die_attach))    AS die_attach,
+  toInt64(sum(wire_bond))     AS wire_bond,
+  toInt64(sum(molding))       AS molding,
+  toInt64(sum(testing))       AS testing,
+  toInt64(sum(test_done))     AS test_done,
+  toString(max(update_time))  AS update_time
+FROM (${BASE_SQL})
+WHERE ${where}`;
 
-  const dataRows = allR.filter((r) => r._kind === "data");
-  const metaRow  = (allR.find((r) => r._kind === "meta") ?? {}) as Record<string, unknown>;
+  const [dataR, metaR] = await Promise.all([
+    client.query({ query: dataSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
+    client.query({ query: metaSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
+  ]);
+
+  const rows = dataR.map(toRow);
+  const metaRow = metaR[0] ?? {};
 
   const total = parseInt(String(metaRow._cnt ?? "0"), 10);
-  const rows  = dataRows.map(toRow);
 
   const orderQty  = Number(metaRow.order_qty  ?? 0);
   const openQty   = Number(metaRow.open_qty   ?? 0);
