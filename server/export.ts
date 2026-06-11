@@ -13,7 +13,7 @@ import {
   checkUserReportPermission, getReportModuleByCode, getReportModuleDatasource,
   getAllUsers, listOperationLogsForExport,
 } from "./db";
-import { getClickHouseClient } from "./datasource";
+import { getReportDbClient } from "./datasource";
 import { ALL_REPORTS } from "./reports/_registry";
 import { extractRows, renderExcel } from "./reports/_excel";
 import { logOperation } from "./_core/operationLog";
@@ -148,8 +148,8 @@ export function registerExportRoutes(app: Router) {
         const ds = await getReportModuleDatasource(plugin.meta.code);
 
         let exported: unknown;
-        if (ds && ds.type === "clickhouse") {
-          const client = getClickHouseClient(ds);
+        if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
+          const client = getReportDbClient(ds);
           exported = await plugin.exportQuery(client, input);
         } else if (plugin.mockExport) {
           exported = plugin.mockExport(input);

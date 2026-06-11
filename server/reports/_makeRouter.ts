@@ -13,7 +13,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getReportModuleByCode, checkUserReportPermission, getReportModuleDatasource } from "../db";
-import { getClickHouseClient } from "../datasource";
+import { getReportDbClient } from "../datasource";
 import { logOperation } from "../_core/operationLog";
 import type { ReportPlugin } from "./_types";
 
@@ -62,8 +62,8 @@ export function makeReportRouter<
       .query(async ({ ctx, input }) => {
         await assertPermission(ctx.user, code, "view", "无查看权限");
         const ds = await getReportModuleDatasource(code);
-        if (ds && ds.type === "clickhouse" && p.filterOptions) {
-          const client = getClickHouseClient(ds);
+        if (ds && (ds.type === "clickhouse" || ds.type === "doris") && p.filterOptions) {
+          const client = getReportDbClient(ds);
           return p.filterOptions(client, input as FilterInput);
         }
         if (p.mockFilterOptions) {
@@ -82,8 +82,8 @@ export function makeReportRouter<
         let success = true;
         let errorMsg: string | null = null;
         try {
-          if (ds && ds.type === "clickhouse") {
-            const client = getClickHouseClient(ds);
+          if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
+            const client = getReportDbClient(ds);
             return await p.query(client, input as Input);
           }
           if (p.mockQuery) {
@@ -117,8 +117,8 @@ export function makeReportRouter<
       .query(async ({ ctx, input }) => {
         await assertPermission(ctx.user, code, "export", "无导出权限");
         const ds = await getReportModuleDatasource(code);
-        if (ds && ds.type === "clickhouse") {
-          const client = getClickHouseClient(ds);
+        if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
+          const client = getReportDbClient(ds);
           return p.exportQuery(client, input as Input);
         }
         if (p.mockExport) {

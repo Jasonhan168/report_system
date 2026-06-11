@@ -6,8 +6,8 @@
  *   - Express 导出接口（/api/export/<code>）
  *   - report_modules 表默认记录
  */
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ZodTypeAny } from "zod";
+import type { ReportDbClient } from "./_dbClient";
 
 /** 报表模块元数据 —— 写入 report_modules 表 */
 export interface ReportMeta {
@@ -86,18 +86,18 @@ export interface ReportPlugin<
   /** Zod schema —— filterOptions 过程（可选，部分报表无 filterOptions 或无参数） */
   filterOptionsInputSchema?: ZodTypeAny;
 
-  /** 分页查询（ClickHouse） */
-  query: (client: ClickHouseClient, input: Input) => Promise<QueryReturn>;
-  /** 筛选项查询（ClickHouse） */
-  filterOptions?: (client: ClickHouseClient, input: FilterInput) => Promise<FilterOptions>;
-  /** 导出查询（ClickHouse） */
-  exportQuery: (client: ClickHouseClient, input: Input) => Promise<ExportReturn>;
+  /** 分页查询（ClickHouse / Doris） */
+  query: (client: ReportDbClient, input: Input) => Promise<QueryReturn>;
+  /** 筛选项查询（ClickHouse / Doris） */
+  filterOptions?: (client: ReportDbClient, input: FilterInput) => Promise<FilterOptions>;
+  /** 导出查询（ClickHouse / Doris） */
+  exportQuery: (client: ReportDbClient, input: Input) => Promise<ExportReturn>;
 
-  /** 无 ClickHouse 数据源时的兜底 query 返回值 */
+  /** 无数据源时的兜底 query 返回值 */
   emptyQueryResult: QueryReturn;
-  /** 无 ClickHouse 数据源时的兜底 filterOptions 返回值 */
+  /** 无数据源时的兜底 filterOptions 返回值 */
   emptyFilterOptions?: FilterOptions;
-  /** 无 ClickHouse 数据源时的兜底 export 返回值 */
+  /** 无数据源时的兜底 export 返回值 */
   emptyExportRows?: ExportReturn;
 
   /** Mock 实现（例如 pkg_wip_summary 需要带演示数据） */

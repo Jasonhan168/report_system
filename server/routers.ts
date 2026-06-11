@@ -12,7 +12,7 @@ import {
   getAllPermissionsWithUsers, getAllSystemConfigs, upsertSystemConfig,
   initDefaultData, listOperationLogs,
 } from "./db";
-import { testClickHouseConnection, invalidateClickHouseClient } from "./datasource";
+import { testClickHouseConnection, invalidateClickHouseClient, testDorisConnection, invalidateDorisClient } from "./datasource";
 import { makeReportRouter } from "./reports/_makeRouter";
 import {
   pkgWipSummary,
@@ -242,7 +242,7 @@ export const appRouter = router({
     create: adminProcedure
       .input(z.object({
         name: z.string().min(1),
-        type: z.enum(["mysql", "clickhouse", "oracle", "mock"]),
+        type: z.enum(["mysql", "clickhouse", "doris", "oracle", "mock"]),
         host: z.string().optional(),
         port: z.number().optional(),
         database: z.string().optional(),
@@ -258,7 +258,7 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         name: z.string().min(1).optional(),
-        type: z.enum(["mysql", "clickhouse", "oracle", "mock"]).optional(),
+        type: z.enum(["mysql", "clickhouse", "doris", "oracle", "mock"]).optional(),
         host: z.string().optional(),
         port: z.number().optional(),
         database: z.string().optional(),
@@ -289,6 +289,11 @@ export const appRouter = router({
           if (!result.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.message });
           return { success: true, message: result.message };
         }
+        if (ds.type === "doris") {
+          const result = await testDorisConnection(ds);
+          if (!result.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.message });
+          return { success: true, message: result.message };
+        }
         return { success: true, message: "连接测试成功" };
       }),
     // 更新数据源时清除连接缓存
@@ -296,6 +301,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         invalidateClickHouseClient(input.id);
+        invalidateDorisClient(input.id);
         return { success: true };
       }),
   }),

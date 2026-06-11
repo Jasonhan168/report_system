@@ -6,8 +6,8 @@
  * 支持从汇总表下钻时传入 orderNos 精确过滤
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
+import { type ReportDbClient, sqlCastStr, sqlGroupUniqArray, parseArrayResult } from "./_dbClient";
 
 /** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
 function localToday(): string {
@@ -76,10 +76,10 @@ function buildWhere(f: Input): string {
   return parts.join(" AND ");
 }
 
-const SELECT_COLS = `
+const SELECT_COLS = (engine: ReportDbClient["engineType"]) => `
   order_no,
-  toString(order_date) AS order_date,
-  toString(edd) AS edd,
+  ${sqlCastStr(engine, "order_date")} AS order_date,
+  ${sqlCastStr(engine, "edd")} AS edd,
   process_type,
   production_type,
   vendor_name,
@@ -111,66 +111,64 @@ function computeOverdueDays(edd: string): number {
   return Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / 86400000));
 }
 
-async function queryData(client: ClickHouseClient, input: Input): Promise<{ rows: Row[]; total: number }> {
+async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: Row[]; total: number }> {
   const where = buildWhere(input);
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
+  const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count() AS cnt FROM v_dwd_order WHERE ${where}`;
+  const countSql = `SELECT count(*) AS cnt FROM v_dwd_order WHERE ${where}`;
   const dataSql = `
-    SELECT ${SELECT_COLS}
+    SELECT ${cols}
     FROM v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
-  type CountResult = { data: { cnt: string }[] };
-  type DataResult = { data: Row[] };
-
   const [countR, dataR] = await Promise.all([
-    client.query({ query: countSql }).then((r) => r.json() as Promise<CountResult>),
-    client.query({ query: dataSql }).then((r) => r.json() as Promise<DataResult>),
+    client.query<{ cnt: string }>(countSql),
+    client.query<Row>(dataSql),
   ]);
 
-  const total = parseInt(countR.data[0]?.cnt ?? "0", 10);
-  const rows = (dataR.data ?? []).map(normalizeRow);
+  const total = parseInt(countR[0]?.cnt ?? "0", 10);
+  const rows = (dataR ?? []).map(normalizeRow);
   return { rows, total };
 }
 
-async function queryFilter(client: ClickHouseClient, input: FilterInput): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, input: FilterInput): Promise<FilterOptions> {
   const d = input.date || localToday();
+  const engine = client.engineType;
   const sql = `
     SELECT
-      groupUniqArray(production_type) AS production_types,
-      groupUniqArray(vendor_name) AS vendor_names,
-      groupUniqArray(plant) AS plants
+      ${sqlGroupUniqArray(engine, "production_type")} AS production_types,
+      ${sqlGroupUniqArray(engine, "vendor_name")} AS vendor_names,
+      ${sqlGroupUniqArray(engine, "plant")} AS plants
     FROM v_dwd_order
     WHERE date = '${esc(d)}' AND received_rate < 98
   `;
-  type R = { data: { production_types: string[]; vendor_names: string[]; plants: string[] }[] };
-  const r = (await client.query({ query: sql }).then((x) => x.json())) as R;
-  const row = r.data[0] ?? { production_types: [], vendor_names: [], plants: [] };
+  const r = await client.query<{ production_types: unknown; vendor_names: unknown; plants: unknown }>(sql);
+  const row = r[0] ?? { production_types: [], vendor_names: [], plants: [] };
   return {
-    productionTypes: (row.production_types ?? []).filter(Boolean).sort(),
-    vendorNames: (row.vendor_names ?? []).filter(Boolean).sort(),
-    plants: (row.plants ?? []).filter(Boolean).sort(),
+    productionTypes: parseArrayResult(row.production_types).filter(Boolean).sort(),
+    vendorNames: parseArrayResult(row.vendor_names).filter(Boolean).sort(),
+    plants: parseArrayResult(row.plants).filter(Boolean).sort(),
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: Input): Promise<Row[]> {
+async function queryExport(client: ReportDbClient, input: Input): Promise<Row[]> {
   const where = buildWhere(input);
+  const cols = SELECT_COLS(client.engineType);
   const sql = `
-    SELECT ${SELECT_COLS}
+    SELECT ${cols}
     FROM v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT 999999
   `;
-  type R = { data: Row[] };
-  const r = (await client.query({ query: sql }).then((x) => x.json())) as R;
-  return (r.data ?? []).map(normalizeRow);
+  const r = await client.query<Row>(sql);
+  return (r ?? []).map(normalizeRow);
 }
 
 const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {

@@ -8,8 +8,8 @@
  *   - 支持按委外厂商、封装形式、标签品名、供应商料号、工程/量产、分公司过滤
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
+import { type ReportDbClient, type EngineType, sqlCastStr, sqlCastInt64, sqlGroupUniqArrayIf, parseArrayResult } from "./_dbClient";
 
 /** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
 function localToday(): string {
@@ -104,11 +104,12 @@ function computeOverdueDays(edd: string | null | undefined): number {
 }
 
 // ─── 基础 SQL ────────────────────────────────────────────────────────────────
-const BASE_SQL = `
+function getBaseSql(engine: EngineType): string {
+  return `
 SELECT
     ifNull(order_no, '')         AS order_no,
-    toString(ifNull(order_date, '')) AS order_date,
-    toString(ifNull(edd, ''))    AS edd,
+    ${sqlCastStr(engine, "ifNull(order_date, '')")} AS order_date,
+    ${sqlCastStr(engine, "ifNull(edd, '')")}    AS edd,
     ifNull(process_type, '')     AS process_type,
     ifNull(production_type, '')  AS production_type,
     ifNull(vendor_name, '')      AS vendor_name,
@@ -125,11 +126,12 @@ SELECT
     ifNull(testing, 0)           AS testing,
     ifNull(test_done, 0)         AS test_done,
     ifNull(plant, '')            AS plant,
-    toString(ifNull(update_time, '')) AS update_time
+    ${sqlCastStr(engine, "ifNull(update_time, '')")} AS update_time
 FROM v_dwd_order_wip
 WHERE package_type != ''
   AND vendor_name IN (SELECT DISTINCT vendor_name FROM v_dws_ab_wip WHERE vendor_name != '')
 `;
+}
 
 function buildWhere(p: Input): string {
   const conds: string[] = ["1 = 1"];
@@ -180,46 +182,46 @@ function toRow(r: Record<string, unknown>): Row {
   };
 }
 
-// ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
+// ─── 数据库查询 ─────────────────────────────────────────────────────────────
 // 策略说明：
 //   1) query：数据分页 + 统计(count/sum)拆分为两条独立 SQL 并行执行，
 //      规避 ClickHouse 18.16.1 UNION ALL 中 count() 在 WHERE 生效时返回 0 的兼容问题。
 //   2) filterOptions：用 groupUniqArrayIf 单次扫描即可一次性聚合 6 个字段的去重列表。
-async function queryData(client: ClickHouseClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
+  const engine = client.engineType;
+  const BASE_SQL = getBaseSql(engine);
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
 
-  // ClickHouse 18.16.1 UNION ALL 中 count() 在 WHERE 条件生效时返回 0 的兼容性问题，
-  // 因此将数据查询和统计查询拆分为两条独立 SQL 执行。
   const dataSql = `
 SELECT
   order_no, order_date, edd, process_type, production_type,
   vendor_name, part_no, lot_no, label, vendor_part_no, package_type,
   order_qty, open_qty, die_attach, wire_bond, molding, testing, test_done,
   plant, update_time
-FROM (${BASE_SQL})
+FROM (${BASE_SQL}) AS t
 WHERE ${where}
 ORDER BY order_date DESC, order_no, lot_no
 LIMIT ${pageSize} OFFSET ${offset}`;
 
   const metaSql = `
 SELECT
-  count()                     AS _cnt,
-  toInt64(sum(order_qty))     AS order_qty,
-  toInt64(sum(open_qty))      AS open_qty,
-  toInt64(sum(die_attach))    AS die_attach,
-  toInt64(sum(wire_bond))     AS wire_bond,
-  toInt64(sum(molding))       AS molding,
-  toInt64(sum(testing))       AS testing,
-  toInt64(sum(test_done))     AS test_done,
-  toString(max(update_time))  AS update_time
-FROM (${BASE_SQL})
+  count(*)                     AS _cnt,
+  ${sqlCastInt64(engine, "sum(order_qty)")}     AS order_qty,
+  ${sqlCastInt64(engine, "sum(open_qty)")}      AS open_qty,
+  ${sqlCastInt64(engine, "sum(die_attach)")}    AS die_attach,
+  ${sqlCastInt64(engine, "sum(wire_bond)")}     AS wire_bond,
+  ${sqlCastInt64(engine, "sum(molding)")}       AS molding,
+  ${sqlCastInt64(engine, "sum(testing)")}       AS testing,
+  ${sqlCastInt64(engine, "sum(test_done)")}     AS test_done,
+  ${sqlCastStr(engine, "max(update_time)")}  AS update_time
+FROM (${BASE_SQL}) AS t
 WHERE ${where}`;
 
   const [dataR, metaR] = await Promise.all([
-    client.query({ query: dataSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
-    client.query({ query: metaSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
+    client.query<Record<string, unknown>>(dataSql),
+    client.query<Record<string, unknown>>(metaSql),
   ]);
 
   const rows = dataR.map(toRow);
@@ -256,45 +258,35 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
-  // 单次扫描 BASE_SQL，使用 groupUniqArrayIf 一次性聚合所有 6 个字段的去重列表
+async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+  const engine = client.engineType;
+  const BASE_SQL = getBaseSql(engine);
+
   const sql = `
 SELECT
-  arraySort(groupUniqArrayIf(vendor_name,     vendor_name     != '')) AS vendor_names,
-  arraySort(groupUniqArrayIf(package_type,    package_type    != '')) AS package_types,
-  arraySort(groupUniqArrayIf(label,           label           != '')) AS labels,
-  arraySort(groupUniqArrayIf(vendor_part_no,  vendor_part_no  != '')) AS vendor_part_nos,
-  arraySort(groupUniqArrayIf(production_type, production_type != '')) AS production_types,
-  arraySort(groupUniqArrayIf(plant,           plant           != '')) AS plants
-FROM (${BASE_SQL})`;
+  ${sqlGroupUniqArrayIf(engine, "vendor_name", "vendor_name != ''")} AS vendor_names,
+  ${sqlGroupUniqArrayIf(engine, "package_type", "package_type != ''")} AS package_types,
+  ${sqlGroupUniqArrayIf(engine, "label", "label != ''")} AS labels,
+  ${sqlGroupUniqArrayIf(engine, "vendor_part_no", "vendor_part_no != ''")} AS vendor_part_nos,
+  ${sqlGroupUniqArrayIf(engine, "production_type", "production_type != ''")} AS production_types,
+  ${sqlGroupUniqArrayIf(engine, "plant", "plant != ''")} AS plants
+FROM (${BASE_SQL}) AS t`;
 
-  const r = await client
-    .query({ query: sql, format: "JSONEachRow" })
-    .then((res) => res.json<{
-      vendor_names:     string[];
-      package_types:    string[];
-      labels:           string[];
-      vendor_part_nos:  string[];
-      production_types: string[];
-      plants:           string[];
-    }>());
+  const r = await client.query<Record<string, unknown>>(sql);
 
-  const row = r[0] ?? {
-    vendor_names: [], package_types: [], labels: [],
-    vendor_part_nos: [], production_types: [], plants: [],
-  };
+  const row = r[0] ?? {};
 
   return {
-    vendorNames:     row.vendor_names     ?? [],
-    packageTypes:    row.package_types    ?? [],
-    labels:          row.labels           ?? [],
-    vendorPartNos:   row.vendor_part_nos  ?? [],
-    productionTypes: row.production_types ?? [],
-    plants:          row.plants           ?? [],
+    vendorNames:     parseArrayResult(row.vendor_names).sort(),
+    packageTypes:    parseArrayResult(row.package_types).sort(),
+    labels:          parseArrayResult(row.labels).sort(),
+    vendorPartNos:   parseArrayResult(row.vendor_part_nos).sort(),
+    productionTypes: parseArrayResult(row.production_types).sort(),
+    plants:          parseArrayResult(row.plants).sort(),
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: Input): Promise<ExportReturn> {
+async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
   const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }

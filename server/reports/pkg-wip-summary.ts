@@ -7,9 +7,9 @@
  *   - 导出带合计行（不受分页影响，后端单独聚合）
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import { generateMockWipData, generateMockFilterOptions, type WipRecord } from "../mockData";
 import type { ReportPlugin, QueryResult } from "./_types";
+import { type ReportDbClient, type EngineType, sqlGroupArray, parseArrayResult } from "./_dbClient";
 
 // ─── 输入 / 返回类型 ─────────────────────────────────────────────────────────
 interface SummaryInput {
@@ -76,10 +76,7 @@ function buildWhere(p: SummaryInput): string {
 function toRec(row: Record<string, unknown>): WipRecord {
   let order_nos: string[] = [];
   const raw = row.order_nos;
-  if (Array.isArray(raw)) order_nos = raw.map(String);
-  else if (typeof raw === "string" && raw.startsWith("[")) {
-    try { order_nos = JSON.parse(raw); } catch { order_nos = []; }
-  }
+  order_nos = parseArrayResult(raw);
   return {
     label_name: String(row.label_name ?? ""),
     vendor_part_no: String(row.vendor_part_no ?? ""),
@@ -96,20 +93,21 @@ function toRec(row: Record<string, unknown>): WipRecord {
   };
 }
 
-// ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
-async function queryData(client: ClickHouseClient, input: SummaryInput): Promise<SummaryQueryReturn> {
+// ─── ClickHouse / Doris 查询 ─────────────────────────────────────────────────────────
+async function queryData(client: ReportDbClient, input: SummaryInput): Promise<SummaryQueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
+  const engine = client.engineType;
 
   const countSql = `
-SELECT count() AS cnt
+SELECT count(*) AS cnt
 FROM (
   SELECT label_name, vendor_part_no, vendor_name
-  FROM (${INNER_SQL})
+  FROM (${INNER_SQL}) AS t
   WHERE ${where}
   GROUP BY label_name, vendor_part_no, vendor_name
-)`;
+) AS t2`;
   const dataSql = `
 SELECT
     label_name, vendor_part_no, vendor_name,
@@ -121,8 +119,8 @@ SELECT
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty,
-    groupArray(order_no) AS order_nos
-FROM (${INNER_SQL})
+    ${sqlGroupArray(engine, "order_no")} AS order_nos
+FROM (${INNER_SQL}) AS t
 WHERE ${where}
 GROUP BY label_name, vendor_part_no, vendor_name
 ORDER BY label_name, vendor_name
@@ -137,13 +135,13 @@ SELECT
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty
-FROM (${INNER_SQL})
+FROM (${INNER_SQL}) AS t
 WHERE ${where}`;
 
   const [countR, dataR, totalR] = await Promise.all([
-    client.query({ query: countSql, format: "JSONEachRow" }).then((r) => r.json<{ cnt: string }>()),
-    client.query({ query: dataSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
-    client.query({ query: totalSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, string>>()),
+    client.query<{ cnt: string }>(countSql),
+    client.query<Record<string, unknown>>(dataSql),
+    client.query<Record<string, string>>(totalSql),
   ]);
   const total = parseInt(countR[0]?.cnt ?? "0", 10);
   const rows = dataR.map(toRec);
@@ -163,17 +161,15 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ClickHouseClient, input: SummaryFilterInput): Promise<SummaryFilterOptions> {
+async function queryFilter(client: ReportDbClient, input: SummaryFilterInput): Promise<SummaryFilterOptions> {
   const safeDate = escStr(input.date);
   const [labelR, vendorR] = await Promise.all([
-    client.query({
-      query: `SELECT DISTINCT label_name FROM (${INNER_SQL}) WHERE date = '${safeDate}' ORDER BY label_name`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ label_name: string }>()),
-    client.query({
-      query: `SELECT DISTINCT vendor_name FROM (${INNER_SQL}) WHERE date = '${safeDate}' ORDER BY vendor_name`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ vendor_name: string }>()),
+    client.query<{ label_name: string }>(
+      `SELECT DISTINCT label_name FROM (${INNER_SQL}) AS t WHERE date = '${safeDate}' ORDER BY label_name`,
+    ),
+    client.query<{ vendor_name: string }>(
+      `SELECT DISTINCT vendor_name FROM (${INNER_SQL}) AS t WHERE date = '${safeDate}' ORDER BY vendor_name`,
+    ),
   ]);
   return {
     labelNames: labelR.map((r) => r.label_name),
@@ -181,7 +177,7 @@ async function queryFilter(client: ClickHouseClient, input: SummaryFilterInput):
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: SummaryInput): Promise<SummaryExportReturn> {
+async function queryExport(client: ReportDbClient, input: SummaryInput): Promise<SummaryExportReturn> {
   const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }

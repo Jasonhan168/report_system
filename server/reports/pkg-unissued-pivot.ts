@@ -6,8 +6,8 @@
  * 行列均带合计
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin, ExcelConfig } from "./_types";
+import { type ReportDbClient } from "./_dbClient";
 
 function localToday(): string {
   const d = new Date();
@@ -141,15 +141,13 @@ function buildPivot(flatRows: FlatRow[]): {
 
 // ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
 
-async function queryData(client: ClickHouseClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
   const { page = 1, pageSize = 50 } = input;
   const where = buildWhere(input);
 
   const sql = `${BASE_SQL} ${where} GROUP BY package_type, vendor_name ORDER BY package_type, vendor_name`;
 
-  const raw = await client
-    .query({ query: sql, format: "JSONEachRow" })
-    .then((r) => r.json<Record<string, unknown>>());
+  const raw = await client.query<Record<string, unknown>>(sql);
 
   const flatRows: FlatRow[] = raw.map((r) => ({
     package_type: String(r.package_type ?? ""),
@@ -176,7 +174,7 @@ async function queryData(client: ClickHouseClient, input: Input): Promise<QueryR
   return { vendors, rows, totalRow, colTotals, grandTotal, total };
 }
 
-async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   const ptSql = `
     SELECT DISTINCT package_type
     FROM v_dwd_order_wip
@@ -190,8 +188,8 @@ async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
     ORDER BY production_type
   `;
   const [ptR, prodR] = await Promise.all([
-    client.query({ query: ptSql, format: "JSONEachRow" }).then((r) => r.json<{ package_type: string }>()),
-    client.query({ query: prodSql, format: "JSONEachRow" }).then((r) => r.json<{ production_type: string }>()),
+    client.query<{ package_type: string }>(ptSql),
+    client.query<{ production_type: string }>(prodSql),
   ]);
   return {
     packageTypes: ptR.map((r) => r.package_type).filter(Boolean),
@@ -199,7 +197,7 @@ async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: Input): Promise<ExportReturn> {
+async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
   const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
   return {
     vendors: r.vendors,

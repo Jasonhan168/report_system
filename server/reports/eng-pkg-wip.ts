@@ -11,8 +11,8 @@
  *   - 支持按委外厂商、标签品名、封装形式过滤
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
+import { type ReportDbClient, type EngineType, sqlToday, sqlCastStr, sqlAny } from "./_dbClient";
 
 /** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
 function localToday(): string {
@@ -110,12 +110,13 @@ function computeOverdueDays(edd: string | null | undefined): number {
 }
 
 // ─── 联合查询 SQL（集合 A UNION ALL 集合 B）────────────────────────────────────
-const UNION_SQL = `
+function getUnionSql(engine: EngineType): string {
+  return `
 /* ========== 集合 A：非江苏长电厂商 ========== */
 SELECT
     ifNull(o.order_no, '')         AS order_no,
-    toString(ifNull(o.order_date, '')) AS order_date,
-    toString(ifNull(o.edd, ''))    AS edd,
+    ${sqlCastStr(engine, "ifNull(o.order_date, '')")} AS order_date,
+    ${sqlCastStr(engine, "ifNull(o.edd, '')")}    AS edd,
     ifNull(o.process_type, '')     AS process_type,
     ifNull(o.vendor_name, '')      AS vendor_name,
     ifNull(o.part_no, '')          AS part_no,
@@ -131,13 +132,13 @@ SELECT
     ifNull(w.molding, 0)           AS molding,
     ifNull(w.testing, 0)           AS testing,
     ifNull(w.test_done, 0)         AS test_done,
-    toString(ifNull(w.update_time, '')) AS update_time
+    ${sqlCastStr(engine, "ifNull(w.update_time, '')")} AS update_time
 FROM
 (
     SELECT process_type, order_no, order_date, edd, vendor_name, label, part_no,
            vendor_part_no, package_type, lot_no, qty AS order_qty, open_qty
     FROM v_dwd_order
-    WHERE date = today()
+    WHERE date = ${sqlToday(engine)}
       AND production_type = '2:工程'
       AND order_status <> '已结案'
       AND vendor_name <> '江苏长电'
@@ -157,8 +158,8 @@ UNION ALL
 /* ========== 集合 B：江苏长电（按 order_no + vendor_part_no 聚合）========== */
 SELECT
     ifNull(o.order_no, '')         AS order_no,
-    toString(ifNull(o.order_date, '')) AS order_date,
-    toString(ifNull(o.edd, ''))    AS edd,
+    ${sqlCastStr(engine, "ifNull(o.order_date, '')")} AS order_date,
+    ${sqlCastStr(engine, "ifNull(o.edd, '')")}    AS edd,
     ifNull(o.process_type, '')     AS process_type,
     ifNull(o.vendor_name, '')      AS vendor_name,
     ifNull(o.part_no, '')          AS part_no,
@@ -174,22 +175,22 @@ SELECT
     ifNull(w.molding, 0)           AS molding,
     ifNull(w.testing, 0)           AS testing,
     ifNull(w.test_done, 0)         AS test_done,
-    toString(ifNull(w.update_time, '')) AS update_time
+    ${sqlCastStr(engine, "ifNull(w.update_time, '')")} AS update_time
 FROM
 (
     SELECT order_no, vendor_part_no,
-           any(process_type)   AS process_type,
-           any(order_date)     AS order_date,
-           any(edd)            AS edd,
+           ${sqlAny(engine, "process_type")}   AS process_type,
+           ${sqlAny(engine, "order_date")}     AS order_date,
+           ${sqlAny(engine, "edd")}            AS edd,
            vendor_name,
-           any(label)          AS label,
-           any(part_no)        AS part_no,
-           any(package_type)   AS package_type,
-           any(lot_no)         AS lot_no,
+           ${sqlAny(engine, "label")}          AS label,
+           ${sqlAny(engine, "part_no")}        AS part_no,
+           ${sqlAny(engine, "package_type")}   AS package_type,
+           ${sqlAny(engine, "lot_no")}         AS lot_no,
            sum(qty)            AS order_qty,
            sum(open_qty)       AS open_qty
     FROM v_dwd_order
-    WHERE date = today()
+    WHERE date = ${sqlToday(engine)}
       AND production_type = '2:工程'
       AND order_status <> '已结案'
       AND vendor_name = '江苏长电'
@@ -205,6 +206,7 @@ LEFT JOIN
 ) AS w
 ON o.order_no = w.order_no AND o.vendor_part_no = w.vendor_part_no
 `;
+}
 
 function buildWhere(p: Input): string {
   const conds: string[] = ["1 = 1"];
@@ -242,20 +244,22 @@ function toRow(r: Record<string, unknown>): Row {
   };
 }
 
-// ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
-async function queryData(client: ClickHouseClient, input: Input): Promise<QueryReturn> {
+// ─── 数据库查询 ─────────────────────────────────────────────────────────────
+async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
+  const engine = client.engineType;
+  const UNION_SQL = getUnionSql(engine);
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
 
   const countSql = `
-SELECT count() AS cnt
-FROM (${UNION_SQL})
+SELECT count(*) AS cnt
+FROM (${UNION_SQL}) AS t
 WHERE ${where}`;
 
   const dataSql = `
 SELECT *
-FROM (${UNION_SQL})
+FROM (${UNION_SQL}) AS t
 WHERE ${where}
 ORDER BY order_date DESC, order_no, lot_no
 LIMIT ${pageSize} OFFSET ${offset}`;
@@ -270,14 +274,14 @@ SELECT
     sum(molding)       AS molding,
     sum(testing)       AS testing,
     sum(test_done)     AS test_done,
-    toString(max(update_time)) AS update_time
-FROM (${UNION_SQL})
+    ${sqlCastStr(engine, "max(update_time)")} AS update_time
+FROM (${UNION_SQL}) AS t
 WHERE ${where}`;
 
   const [countR, dataR, totalR] = await Promise.all([
-    client.query({ query: countSql, format: "JSONEachRow" }).then((r) => r.json<{ cnt: string }>()),
-    client.query({ query: dataSql,  format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
-    client.query({ query: totalSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, string>>()),
+    client.query<{ cnt: string }>(countSql),
+    client.query<Record<string, unknown>>(dataSql),
+    client.query<Record<string, string>>(totalSql),
   ]);
 
   const total = parseInt(countR[0]?.cnt ?? "0", 10);
@@ -308,26 +312,21 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
-  const BASE = `FROM (${UNION_SQL})`;
+async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+  const engine = client.engineType;
+  const UNION_SQL = getUnionSql(engine);
 
   const [vendorR, labelR, pkgR] = await Promise.all([
-    client.query({
-      query: `SELECT DISTINCT vendor_name FROM (${UNION_SQL}) WHERE vendor_name != '' ORDER BY vendor_name`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ vendor_name: string }>()),
-    client.query({
-      query: `SELECT DISTINCT label FROM (${UNION_SQL}) WHERE label != '' ORDER BY label`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ label: string }>()),
-    client.query({
-      query: `SELECT DISTINCT package_type FROM (${UNION_SQL}) WHERE package_type != '' ORDER BY package_type`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ package_type: string }>()),
+    client.query<{ vendor_name: string }>(
+      `SELECT DISTINCT vendor_name FROM (${UNION_SQL}) AS t WHERE vendor_name != '' ORDER BY vendor_name`
+    ),
+    client.query<{ label: string }>(
+      `SELECT DISTINCT label FROM (${UNION_SQL}) AS t WHERE label != '' ORDER BY label`
+    ),
+    client.query<{ package_type: string }>(
+      `SELECT DISTINCT package_type FROM (${UNION_SQL}) AS t WHERE package_type != '' ORDER BY package_type`
+    ),
   ]);
-
-  // 避免 TypeScript 报 BASE 未使用
-  void BASE;
 
   return {
     vendorNames:  vendorR.map((r) => r.vendor_name),
@@ -336,7 +335,7 @@ async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: Input): Promise<ExportReturn> {
+async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
   const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }

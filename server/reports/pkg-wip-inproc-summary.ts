@@ -9,8 +9,8 @@
  *   - 输出列包含每组最大 update_time
  */
 import { z } from "zod";
-import type { ClickHouseClient } from "@clickhouse/client";
 import type { ReportPlugin } from "./_types";
+import { type ReportDbClient, sqlToday, sqlCastStr, sqlGroupUniqArray, sqlArrayStringConcat, parseArrayResult } from "./_dbClient";
 
 /** 获取服务器本地时区的当前日期字符串（yyyy-mm-dd），避免 UTC 偏移导致凌晨显示前一天 */
 function localToday(): string {
@@ -79,7 +79,7 @@ function fmtDate(v: string | null | undefined): string {
 }
 
 /** 内层查询：单行粒度（订单 × 供应商料号），已做 NULL 安全化 */
-const INNER_SQL = `
+const INNER_SQL = (engine: ReportDbClient["engineType"]) => `
 SELECT
     ord.order_no               AS order_no,
     ifNull(ord.label, '')          AS label_name,
@@ -107,7 +107,7 @@ FROM v_dwd_order_agg AS ord
 LEFT JOIN v_dws_ab_wip_agg AS wip
        ON wip.order_no       = ord.order_no
       AND wip.vendor_part_no = ord.vendor_part_no
-WHERE ord.date = today()`;
+WHERE ord.date = ${sqlToday(engine)}`;
 
 function buildWhere(p: Input): string {
   const conds: string[] = [];
@@ -119,10 +119,7 @@ function buildWhere(p: Input): string {
 function toRow(r: Record<string, unknown>): Row {
   let order_nos: string[] = [];
   const raw = r.order_nos;
-  if (Array.isArray(raw)) order_nos = raw.map(String);
-  else if (typeof raw === "string" && raw.startsWith("[")) {
-    try { order_nos = JSON.parse(raw); } catch { order_nos = []; }
-  }
+  order_nos = parseArrayResult(raw);
   return {
     label_name: String(r.label_name ?? ""),
     vendor_part_no: String(r.vendor_part_no ?? ""),
@@ -141,23 +138,25 @@ function toRow(r: Record<string, unknown>): Row {
 }
 
 // ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
-async function queryData(client: ClickHouseClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
+  const engine = client.engineType;
+  const innerSql = INNER_SQL(engine);
 
   const countSql = `
-SELECT count() AS cnt
+SELECT count(*) AS cnt
 FROM (
   SELECT vendor_part_no, vendor_name
-  FROM (${INNER_SQL})
+  FROM (${innerSql}) AS t
   ${where}
   GROUP BY vendor_part_no, vendor_name
-)`;
+) AS t2`;
 
   const dataSql = `
 SELECT
-    arrayStringConcat(groupUniqArray(label_name), ',') AS label_name,
+    ${sqlArrayStringConcat(engine, sqlGroupUniqArray(engine, "label_name"), ",")} AS label_name,
     vendor_part_no, vendor_name,
     sum(open_qty)     AS open_qty,
     sum(unissued_qty) AS unissued_qty,
@@ -167,12 +166,12 @@ SELECT
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty,
-    groupUniqArray(order_no) AS order_nos,
-    toString(max(update_time)) AS update_time
+    ${sqlGroupUniqArray(engine, "order_no")} AS order_nos,
+    ${sqlCastStr(engine, "max(update_time)")} AS update_time
 FROM (
-  SELECT * FROM (${INNER_SQL})
+  SELECT * FROM (${innerSql}) AS t
   ${where}
-)
+) AS t2
 GROUP BY vendor_part_no, vendor_name
 ORDER BY vendor_name, vendor_part_no
 LIMIT ${pageSize} OFFSET ${offset}`;
@@ -187,16 +186,16 @@ SELECT
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty,
-    toString(max(update_time)) AS update_time
+    ${sqlCastStr(engine, "max(update_time)")} AS update_time
 FROM (
-  SELECT * FROM (${INNER_SQL})
+  SELECT * FROM (${innerSql}) AS t
   ${where}
-)`;
+) AS t2`;
 
   const [countR, dataR, totalR] = await Promise.all([
-    client.query({ query: countSql, format: "JSONEachRow" }).then((r) => r.json<{ cnt: string }>()),
-    client.query({ query: dataSql,  format: "JSONEachRow" }).then((r) => r.json<Record<string, unknown>>()),
-    client.query({ query: totalSql, format: "JSONEachRow" }).then((r) => r.json<Record<string, string>>()),
+    client.query<{ cnt: string }>(countSql),
+    client.query<Record<string, unknown>>(dataSql),
+    client.query<Record<string, string>>(totalSql),
   ]);
 
   const total = parseInt(countR[0]?.cnt ?? "0", 10);
@@ -219,16 +218,16 @@ FROM (
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+  const engine = client.engineType;
+  const innerSql = INNER_SQL(engine);
   const [labelR, vendorR] = await Promise.all([
-    client.query({
-      query: `SELECT DISTINCT label_name FROM (${INNER_SQL}) WHERE label_name != '' ORDER BY label_name`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ label_name: string }>()),
-    client.query({
-      query: `SELECT DISTINCT vendor_name FROM (${INNER_SQL}) WHERE vendor_name != '' ORDER BY vendor_name`,
-      format: "JSONEachRow",
-    }).then((r) => r.json<{ vendor_name: string }>()),
+    client.query<{ label_name: string }>(
+      `SELECT DISTINCT label_name FROM (${innerSql}) AS t WHERE label_name != '' ORDER BY label_name`,
+    ),
+    client.query<{ vendor_name: string }>(
+      `SELECT DISTINCT vendor_name FROM (${innerSql}) AS t WHERE vendor_name != '' ORDER BY vendor_name`,
+    ),
   ]);
   return {
     labelNames: labelR.map((r) => r.label_name),
@@ -236,7 +235,7 @@ async function queryFilter(client: ClickHouseClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ClickHouseClient, input: Input): Promise<ExportReturn> {
+async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
   const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }

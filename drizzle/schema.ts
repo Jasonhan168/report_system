@@ -32,7 +32,7 @@ export type InsertUser = typeof users.$inferInsert;
 export const datasources = mysqlTable("datasources", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
-  type: mysqlEnum("type", ["mysql", "clickhouse", "oracle", "mock"]).notNull().default("mock"),
+  type: mysqlEnum("type", ["mysql", "clickhouse", "doris", "oracle", "mock"]).notNull().default("mock"),
   host: varchar("host", { length: 256 }),
   port: int("port"),
   database: varchar("database", { length: 128 }),
