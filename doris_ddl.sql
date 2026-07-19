@@ -295,22 +295,30 @@ SELECT
     IFNULL(w.molding, 0)                    AS molding,
     IFNULL(w.testing, 0)                    AS testing,
     IFNULL(w.test_done, 0)                  AS test_done,
+    IFNULL(w.stock_qty, 0)                  AS stock_qty,
+    case when IFNULL(w.delivery_qty, 0) - IFNULL(o.qty, 0)+IFNULL(o.open_qty, 0) > 0 then IFNULL(w.delivery_qty, 0) - IFNULL(o.qty, 0)+IFNULL(o.open_qty, 0) else 0 END as in_transit_qty ,
     IFNULL(o.plant, '')                      AS plant,
     CAST(w.update_time AS VARCHAR(32))       AS update_time
 FROM wip_db.dwd_order o
 LEFT JOIN (
     SELECT
-        order_no,
-        vendor_part_no,
-        batch_no AS lot_no,
-        before_attach,
-        die_attach,
-        wire_bond,
-        molding,
-        testing,
-        test_done,
-        data_time AS update_time
-    FROM wip_db.dws_ab_wip
+        ww.order_no,
+        ww.vendor_part_no,
+        ww.batch_no AS lot_no,
+        ww.before_attach,
+        ww.die_attach,
+        ww.wire_bond,
+        ww.molding,
+        ww.testing,
+        ww.test_done,
+        ww.stock_qty,
+        case when ww.delivery_qty>dd.good_qty+dd.fail_qty then ww.delivery_qty else dd.good_qty+dd.fail_qty end AS delivery_qty, 
+        ww.data_time AS update_time
+    FROM wip_db.dws_ab_wip ww
+    left join wip_db.mv_dwd_ab_delivery_agg dd
+    ON ww.order_no = dd.order_no
+        AND ww.vendor_part_no = dd.vendor_part_no
+        AND ww.batch_no = dd.batch_no
 ) w ON o.order_no = w.order_no
     AND o.vendor_part_no = w.vendor_part_no
     AND o.lot_no = w.lot_no
@@ -346,6 +354,8 @@ SELECT
     IFNULL(w.molding, 0)                    AS molding,
     IFNULL(w.testing, 0)                    AS testing,
     IFNULL(w.test_done, 0)                  AS test_done,
+    IFNULL(w.stock_qty, 0)                  AS stock_qty,
+    case when IFNULL(w.delivery_qty, 0) - IFNULL(o.order_qty, 0)+IFNULL(o.open_qty, 0) > 0 then IFNULL(w.delivery_qty, 0) - IFNULL(o.order_qty, 0)+IFNULL(o.open_qty, 0) else 0 END as in_transit_qty ,    
     IFNULL(o.plant, '')                      AS plant,
     CAST(w.update_time AS VARCHAR(32))       AS update_time
 FROM (
@@ -377,15 +387,22 @@ FROM (
 ) o
 LEFT JOIN (
     SELECT
-        order_no,
-        vendor_part_no,
-        before_attach,
-        die_attach,
-        wire_bond,
-        molding,
-        testing,
-        test_done,
-        data_time AS update_time
-    FROM wip_db.dws_ab_wip
+        ww.order_no,
+        ww.vendor_part_no,
+        ww.batch_no AS lot_no,
+        ww.before_attach,
+        ww.die_attach,
+        ww.wire_bond,
+        ww.molding,
+        ww.testing,
+        ww.test_done,
+        ww.stock_qty,
+        case when ww.delivery_qty>dd.good_qty+dd.fail_qty then ww.delivery_qty else dd.good_qty+dd.fail_qty end AS delivery_qty, 
+        ww.data_time AS update_time
+    FROM wip_db.dws_ab_wip ww
+    left join wip_db.mv_dwd_ab_delivery_agg dd
+    ON ww.order_no = dd.order_no
+        AND ww.vendor_part_no = dd.vendor_part_no
+        AND ww.batch_no = dd.batch_no
 ) w ON o.order_no = w.order_no
     AND o.vendor_part_no = w.vendor_part_no;

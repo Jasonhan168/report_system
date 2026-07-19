@@ -73,7 +73,9 @@ const UNISSUED_EXPR = `
    - ifNull(wire_bond, 0)
    - ifNull(molding, 0)
    - ifNull(testing, 0)
-   - ifNull(test_done, 0))
+   - ifNull(test_done, 0)
+   - ifNull(stock_qty, 0)
+   - ifNull(in_transit_qty, 0))
 `;
 
 const BASE_SQL = `

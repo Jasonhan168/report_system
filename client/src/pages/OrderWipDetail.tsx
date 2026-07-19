@@ -214,19 +214,19 @@ function highlightMatch(text: string, keyword: string) {
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
-// 表头定义（23列）
+// 表头定义（25列）
 const HEADERS = [
   // 0          1           2           3            4           5
   "下单日期", "委外订单号", "Lot No.", "标签品名", "供应商料号", "封装形式",
-  // 6          7            8          9     10     11     12     13         14         15
-  "下单数量", "未回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品合计", "拖期天数",
-  // 16         17           18          19           20         21         22
+  // 6          7            8          9      10     11     12     13         14          15         16         17
+  "下单数量", "已回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品合计", "完工未回", "在途数量", "拖期天数",
+  // 18         19           20          21           22         23         24
   "预计交期", "加工类型", "工程/量产", "委外厂商", "ERP料号", "分公司", "更新时间",
 ];
 const COL_COUNT = HEADERS.length;
-// 数值列（下单数量~拖期天数，索引6~15）
+// 数值列（下单数量~拖期天数，索引6~17）
 const NUM_COL_START = 6;
-const NUM_COL_END   = 15;
+const NUM_COL_END   = 17;
 
 export default function OrderWipDetail() {
   const search = useSearch();
@@ -635,8 +635,8 @@ export default function OrderWipDetail() {
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.package_type}</td>
                       {/* 6: 下单数量 */}
                       <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.order_qty)}</td>
-                      {/* 7: 未回货数量 */}
-                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.open_qty)}</td>
+                      {/* 7: 已回货数量 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.received_qty)}</td>
                       {/* 8: 未投数量 */}
                       <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.unissued_qty)}</td>
                       {/* 9: 装片 */}
@@ -651,7 +651,11 @@ export default function OrderWipDetail() {
                       <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.test_done)}</td>
                       {/* 14: 在制品合计 */}
                       <td className="px-3 py-2.5 text-right text-xs font-semibold text-primary p-2 align-middle whitespace-nowrap">{fmtCell(row.wip_total)}</td>
-                      {/* 15: 拖期天数 */}
+                      {/* 15: 完工未回 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.stock_qty)}</td>
+                      {/* 16: 在途数量 */}
+                      <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">{fmtCell(row.in_transit_qty)}</td>
+                      {/* 17: 拖期天数 */}
                       <td className="px-3 py-2.5 text-right text-xs p-2 align-middle whitespace-nowrap">
                         {row.overdue_days > 0 ? (
                           <span className="text-red-600 font-semibold">{row.overdue_days}</span>
@@ -659,7 +663,7 @@ export default function OrderWipDetail() {
                           <span className="text-yellow-600">临近交期</span>
                         ) : ""}
                       </td>
-                      {/* 16: 预计交期 */}
+                      {/* 18: 预计交期 */}
                       <td className={cn(
                         "px-3 py-2.5 text-xs whitespace-nowrap p-2 align-middle",
                         (() => {
@@ -670,17 +674,17 @@ export default function OrderWipDetail() {
                           return "text-muted-foreground";
                         })()
                       )}>{fmtDate(row.edd)}</td>
-                      {/* 17: 加工类型 */}
+                      {/* 19: 加工类型 */}
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.process_type}</td>
-                      {/* 18: 工程/量产 */}
+                      {/* 20: 工程/量产 */}
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.production_type}</td>
-                      {/* 19: 委外厂商 */}
+                      {/* 21: 委外厂商 */}
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.vendor_name}</td>
-                      {/* 20: ERP料号 */}
+                      {/* 22: ERP料号 */}
                       <td className="px-3 py-2.5 text-xs text-muted-foreground p-2 align-middle whitespace-nowrap">{row.part_no}</td>
-                      {/* 21: 分公司 */}
+                      {/* 23: 分公司 */}
                       <td className="px-3 py-2.5 text-xs p-2 align-middle whitespace-nowrap">{row.plant}</td>
-                      {/* 22: 更新时间 */}
+                      {/* 24: 更新时间 */}
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap p-2 align-middle">{fmtDateTime(row.update_time)}</td>
                     </tr>
                     );
@@ -693,8 +697,8 @@ export default function OrderWipDetail() {
                       <td className="px-3 py-3 font-bold text-xs text-primary p-2 align-middle" colSpan={6}>合计</td>
                       {/* 6: 下单数量 */}
                       <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.order_qty)}</td>
-                      {/* 7: 未回货数量 */}
-                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.open_qty)}</td>
+                      {/* 7: 已回货数量 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.received_qty)}</td>
                       {/* 8: 未投数量 */}
                       <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.unissued_qty)}</td>
                       {/* 9: 装片 */}
@@ -709,9 +713,13 @@ export default function OrderWipDetail() {
                       <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.test_done)}</td>
                       {/* 14: 在制品合计 */}
                       <td className="px-3 py-3 text-right text-xs font-bold text-primary p-2 align-middle">{fmtCell(data.totalRow.wip_total)}</td>
-                      {/* 15: 拖期天数 */}
+                      {/* 15: 完工未回 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.stock_qty)}</td>
+                      {/* 16: 在途数量 */}
+                      <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.in_transit_qty)}</td>
+                      {/* 17: 拖期天数 */}
                       <td className="px-3 py-3 text-right text-xs font-bold p-2 align-middle">{fmtCell(data.totalRow.overdue_days)}</td>
-                      {/* 16~22: 预计交期~更新时间 空白 */}
+                      {/* 18~24: 预计交期~更新时间 空白 */}
                       <td colSpan={7} />
                     </tr>
                   )}

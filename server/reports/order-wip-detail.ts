@@ -34,7 +34,10 @@ interface Row {
   vendor_part_no: string;  // 供应商料号
   package_type: string;    // 封装形式
   order_qty: number;       // 下单数量
-  open_qty: number;        // 未回货数量
+  open_qty: number;        // 未交数量（内部计算用，不展示）
+  received_qty: number;    // 已回货数量（计算字段 = order_qty - open_qty）
+  stock_qty: number;       // 库存数量
+  in_transit_qty: number;  // 在途数量
   die_attach: number;      // 装片
   wire_bond: number;       // 焊线
   molding: number;         // 塑封
@@ -43,7 +46,7 @@ interface Row {
   plant: string;           // 分公司
   update_time: string;     // 更新时间
   wip_total: number;       // 在制品合计（计算字段）
-  unissued_qty: number;    // 未投数量（计算字段）
+  unissued_qty: number;    // 未投数量（计算字段 = open_qty - wip_total - stock_qty - in_transit_qty）
   overdue_days: number;    // 拖期天数（计算字段）
 }
 
@@ -120,6 +123,8 @@ SELECT
     ifNull(package_type, '')     AS package_type,
     ifNull(order_qty, 0)         AS order_qty,
     ifNull(open_qty, 0)          AS open_qty,
+    ifNull(stock_qty, 0)         AS stock_qty,
+    ifNull(in_transit_qty, 0)    AS in_transit_qty,
     ifNull(die_attach, 0)        AS die_attach,
     ifNull(wire_bond, 0)         AS wire_bond,
     ifNull(molding, 0)           AS molding,
@@ -153,7 +158,10 @@ function toRow(r: Record<string, unknown>): Row {
   const testing = Number(r.testing ?? 0);
   const testDone = Number(r.test_done ?? 0);
   const wipTotal = dieAttach + wireBond + molding + testing + testDone;
+  const orderQty = Number(r.order_qty ?? 0);
   const openQty = Number(r.open_qty ?? 0);
+  const stockQty = Number(r.stock_qty ?? 0);
+  const inTransitQty = Number(r.in_transit_qty ?? 0);
 
   return {
     order_no:      String(r.order_no      ?? ""),
@@ -167,8 +175,11 @@ function toRow(r: Record<string, unknown>): Row {
     label:         String(r.label         ?? ""),
     vendor_part_no: String(r.vendor_part_no ?? ""),
     package_type:  String(r.package_type  ?? ""),
-    order_qty:     Number(r.order_qty     ?? 0),
+    order_qty:     orderQty,
     open_qty:      openQty,
+    received_qty:  orderQty - openQty,
+    stock_qty:     stockQty,
+    in_transit_qty: inTransitQty,
     die_attach:    dieAttach,
     wire_bond:     wireBond,
     molding:       molding,
@@ -177,7 +188,7 @@ function toRow(r: Record<string, unknown>): Row {
     plant:         String(r.plant          ?? ""),
     update_time:   String(r.update_time   ?? ""),
     wip_total:     wipTotal,
-    unissued_qty:  openQty - wipTotal,
+    unissued_qty:  openQty - wipTotal - stockQty - inTransitQty,
     overdue_days:  computeOverdueDays(eddStr),
   };
 }
@@ -198,7 +209,7 @@ async function queryData(client: ReportDbClient, input: Input): Promise<QueryRet
 SELECT
   order_no, order_date, edd, process_type, production_type,
   vendor_name, part_no, lot_no, label, vendor_part_no, package_type,
-  order_qty, open_qty, die_attach, wire_bond, molding, testing, test_done,
+  order_qty, open_qty, stock_qty, in_transit_qty, die_attach, wire_bond, molding, testing, test_done,
   plant, update_time
 FROM (${BASE_SQL}) AS t
 WHERE ${where}
@@ -210,6 +221,8 @@ SELECT
   count(*)                     AS _cnt,
   ${sqlCastInt64(engine, "sum(order_qty)")}     AS order_qty,
   ${sqlCastInt64(engine, "sum(open_qty)")}      AS open_qty,
+  ${sqlCastInt64(engine, "sum(stock_qty)")}     AS stock_qty,
+  ${sqlCastInt64(engine, "sum(in_transit_qty)")} AS in_transit_qty,
   ${sqlCastInt64(engine, "sum(die_attach)")}    AS die_attach,
   ${sqlCastInt64(engine, "sum(wire_bond)")}     AS wire_bond,
   ${sqlCastInt64(engine, "sum(molding)")}       AS molding,
@@ -231,6 +244,8 @@ WHERE ${where}`;
 
   const orderQty  = Number(metaRow.order_qty  ?? 0);
   const openQty   = Number(metaRow.open_qty   ?? 0);
+  const stockQty  = Number(metaRow.stock_qty  ?? 0);
+  const inTransitQty = Number(metaRow.in_transit_qty ?? 0);
   const dieAttach = Number(metaRow.die_attach ?? 0);
   const wireBond  = Number(metaRow.wire_bond  ?? 0);
   const molding   = Number(metaRow.molding    ?? 0);
@@ -244,6 +259,9 @@ WHERE ${where}`;
     package_type: "", plant: "",
     order_qty:    orderQty,
     open_qty:     openQty,
+    received_qty: orderQty - openQty,
+    stock_qty:    stockQty,
+    in_transit_qty: inTransitQty,
     die_attach:   dieAttach,
     wire_bond:    wireBond,
     molding:      molding,
@@ -251,7 +269,7 @@ WHERE ${where}`;
     test_done:    testDone,
     update_time:  String(metaRow.update_time ?? ""),
     wip_total:    wipTotal,
-    unissued_qty: openQty - wipTotal,
+    unissued_qty: openQty - wipTotal - stockQty - inTransitQty,
     overdue_days: 0,
   };
 
@@ -296,7 +314,8 @@ const EMPTY_TOTAL_ROW: Row = {
   order_no: "", order_date: "", edd: "", process_type: "", production_type: "",
   vendor_name: "", part_no: "", lot_no: "合计", label: "", vendor_part_no: "",
   package_type: "", plant: "",
-  order_qty: 0, open_qty: 0, die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0,
+  order_qty: 0, open_qty: 0, received_qty: 0, stock_qty: 0, in_transit_qty: 0,
+  die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0,
   update_time: "", wip_total: 0, unissued_qty: 0, overdue_days: 0,
 };
 
@@ -370,8 +389,8 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
       // 数值列：右对齐
       { header: "下单数量",     width: 12, value: (r) => r.order_qty,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.order_qty) || 0), 0) },
-      { header: "未回货数量",   width: 12, value: (r) => r.open_qty,
-        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.open_qty) || 0), 0) },
+      { header: "已回货数量",   width: 12, value: (r) => r.received_qty,
+        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.received_qty) || 0), 0) },
       { header: "未投数量",     width: 12, value: (r) => r.unissued_qty,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.unissued_qty) || 0), 0) },
       { header: "装片",         width: 10, value: (r) => r.die_attach,
@@ -386,6 +405,10 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.test_done) || 0), 0) },
       { header: "在制品合计",   width: 12, value: (r) => r.wip_total,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.wip_total) || 0), 0) },
+      { header: "完工未回",     width: 12, value: (r) => r.stock_qty,
+        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.stock_qty) || 0), 0) },
+      { header: "在途数量",     width: 12, value: (r) => r.in_transit_qty,
+        totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.in_transit_qty) || 0), 0) },
       { header: "拖期天数",     width: 10, value: (r) => r.overdue_days > 0 ? r.overdue_days : "" },
       // 后 7 列：文本左对齐
       { header: "预计交期",     width: 12, value: (r) => r.edd || "" },
