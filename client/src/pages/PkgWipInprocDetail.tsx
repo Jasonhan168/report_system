@@ -32,6 +32,7 @@ export default function PkgWipInprocDetail() {
   const backRoute = sp.get("backRoute") || "/reports/pkg-wip-inproc-summary";
   const summaryLabelName = sp.get("summaryLabelName") ?? "";
   const summaryVendorName = sp.get("summaryVendorName") ?? "";
+  const summaryPackageType = sp.get("summaryPackageType") ?? "";
 
   const [vendorName, setVendorName] = useState(sp.get("vendorName") ?? "");
   const [labelName, setLabelName] = useState(sp.get("labelName") ?? "");
@@ -140,6 +141,7 @@ export default function PkgWipInprocDetail() {
                 const backParams = new URLSearchParams();
                 if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
                 if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                if (summaryPackageType) backParams.set("summaryPackageType", summaryPackageType);
                 const qs = backParams.toString();
                 navigate(`${backRoute}${qs ? `?${qs}` : ""}`);
               }}

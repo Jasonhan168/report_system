@@ -188,13 +188,15 @@ export default function PkgWipInprocSummary() {
   const initParams = new URLSearchParams(window.location.search);
   const initLabelName = initParams.get("summaryLabelName") || "";
   const initVendorName = initParams.get("summaryVendorName") || "";
+  const initPackageType = initParams.get("summaryPackageType") || "";
 
   const [labelName, setLabelName] = useState(initLabelName);
   const [vendorName, setVendorName] = useState(initVendorName);
+  const [packageType, setPackageType] = useState(initPackageType);
   const [pageSize, setPageSize] = useState(20);
 
   const [queryParams, setQueryParams] = useState({
-    labelName: initLabelName, vendorName: initVendorName, page: 1, pageSize: 20,
+    labelName: initLabelName, vendorName: initVendorName, packageType: initPackageType, page: 1, pageSize: 20,
   });
 
   const { data: viewPerm } = trpc.pkgWipInprocSummary.checkPermission.useQuery({ type: "view" });
@@ -230,8 +232,8 @@ export default function PkgWipInprocSummary() {
   useAutoTitles(tableRef, [data]);
 
   const handleSearch = useCallback(() => {
-    setQueryParams({ labelName, vendorName, page: 1, pageSize });
-  }, [labelName, vendorName, pageSize]);
+    setQueryParams({ labelName, vendorName, packageType, page: 1, pageSize });
+  }, [labelName, vendorName, packageType, pageSize]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setQueryParams((prev) => ({ ...prev, page: newPage }));
@@ -252,6 +254,7 @@ export default function PkgWipInprocSummary() {
       const params = new URLSearchParams({
         ...(queryParams.labelName ? { labelName: queryParams.labelName } : {}),
         ...(queryParams.vendorName ? { vendorName: queryParams.vendorName } : {}),
+        ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
       });
       const resp = await fetch(`/api/export/pkg-wip-inproc-summary?${params.toString()}`);
       if (!resp.ok) {
@@ -295,8 +298,8 @@ export default function PkgWipInprocSummary() {
     );
   }
 
-  const COL_COUNT = 12;
-  const headers = ["标签品名", "供应商料号", "供应商", "未回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
+  const COL_COUNT = 13;
+  const headers = ["标签品名", "供应商料号", "封装形式", "供应商", "未回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
   const TODAY = localToday();
 
   return (
@@ -325,7 +328,7 @@ export default function PkgWipInprocSummary() {
 
       {/* 查询条件 */}
       <div className="bg-card rounded-xl border border-border p-5 mb-5 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">
               标签品名
@@ -351,6 +354,20 @@ export default function PkgWipInprocSummary() {
               onChange={setVendorName}
               placeholder="全部（可输入筛选）"
               emptyText="无匹配的供应商"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">
+              封装形式
+              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
+            </Label>
+            <FuzzyCombobox
+              options={filterOpts?.packageTypes ?? []}
+              value={packageType}
+              onChange={setPackageType}
+              placeholder="全部（可输入筛选）"
+              emptyText="无匹配的封装形式"
             />
           </div>
 
@@ -405,7 +422,7 @@ export default function PkgWipInprocSummary() {
                     key={h}
                     className={cn(
                       "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3",
-                      i >= 3 && i <= 10 && "text-right"
+                      i >= 4 && i <= 11 && "text-right"
                     )}
                   >
                     {h}
@@ -441,6 +458,7 @@ export default function PkgWipInprocSummary() {
                     const summaryBack = {
                       ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
                       ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
+                      ...(queryParams.packageType ? { summaryPackageType: queryParams.packageType } : {}),
                     };
                     // 跳转封装在制品明细表（点击在制品总数）
                     // 注：汇总表已按 vendor_part_no + vendor_name 分组，label_name 为拼接值
@@ -470,6 +488,7 @@ export default function PkgWipInprocSummary() {
                     <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
                       <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs">{row.package_type}</TableCell>
                       <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
                       <TableCell className="px-3 py-2.5 text-right text-xs">
                         {rowAny.open_qty ? (
@@ -499,7 +518,7 @@ export default function PkgWipInprocSummary() {
                   })}
                   {data?.totalRow && (
                     <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
-                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={3}>合计</TableCell>
+                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={4}>合计</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell((data.totalRow as typeof data.totalRow & { open_qty?: number }).open_qty ?? 0)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.unissued_qty)}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.die_attach)}</TableCell>

@@ -25,6 +25,8 @@ function localToday(): string {
 interface Row {
   label_name: string;
   vendor_part_no: string;
+  /** 封装形式（来源 v_dwd_order，按 order_no+vendor_part_no 关联） */
+  package_type: string;
   vendor_name: string;
   open_qty: number;
   unissued_qty: number;
@@ -43,6 +45,7 @@ interface Row {
 interface Input {
   labelName?: string;
   vendorName?: string;
+  packageType?: string;
   page?: number;
   pageSize?: number;
 }
@@ -50,6 +53,7 @@ interface Input {
 interface FilterOptions {
   labelNames: string[];
   vendorNames: string[];
+  packageTypes: string[];
 }
 
 interface QueryReturn {
@@ -78,8 +82,26 @@ function fmtDate(v: string | null | undefined): string {
   return d;
 }
 
-/** 内层查询：单行粒度（订单 × 供应商料号），已做 NULL 安全化 */
+/** 内层查询：单行粒度（订单 × 供应商料号），已做 NULL 安全化
+ *  注：v_dwd_order_agg 未暴露 package_type，需再关联 v_dwd_order 补充；
+ *      ClickHouse 18.16.1 单个 SELECT 仅支持一个 JOIN，故用嵌套子查询分两层关联 */
 const INNER_SQL = (engine: ReportDbClient["engineType"]) => `
+SELECT
+    base.order_no        AS order_no,
+    base.label_name      AS label_name,
+    base.vendor_part_no  AS vendor_part_no,
+    ifNull(pkg.package_type, '') AS package_type,
+    base.vendor_name     AS vendor_name,
+    base.open_qty        AS open_qty,
+    base.unissued_qty    AS unissued_qty,
+    base.die_attach      AS die_attach,
+    base.wire_bond       AS wire_bond,
+    base.molding         AS molding,
+    base.testing         AS testing,
+    base.test_done       AS test_done,
+    base.wip_qty         AS wip_qty,
+    base.update_time     AS update_time
+FROM (
 SELECT
     ord.order_no               AS order_no,
     ifNull(ord.label, '')          AS label_name,
@@ -107,12 +129,22 @@ FROM v_dwd_order_agg AS ord
 LEFT JOIN v_dws_ab_wip_agg AS wip
        ON wip.order_no       = ord.order_no
       AND wip.vendor_part_no = ord.vendor_part_no
-WHERE ord.date = ${sqlToday(engine)}`;
+WHERE ord.date = ${sqlToday(engine)}
+) AS base
+LEFT JOIN (
+  SELECT order_no, vendor_part_no, max(ifNull(package_type, '')) AS package_type
+  FROM v_dwd_order
+  WHERE date = ${sqlToday(engine)}
+  GROUP BY order_no, vendor_part_no
+) AS pkg
+       ON pkg.order_no       = base.order_no
+      AND pkg.vendor_part_no = base.vendor_part_no`;
 
 function buildWhere(p: Input): string {
   const conds: string[] = [];
   if (p.labelName) conds.push(`lower(label_name) LIKE lower('%${esc(p.labelName)}%')`);
   if (p.vendorName) conds.push(`lower(vendor_name) LIKE lower('%${esc(p.vendorName)}%')`);
+  if (p.packageType) conds.push(`lower(package_type) LIKE lower('%${esc(p.packageType)}%')`);
   return conds.length ? "WHERE " + conds.join(" AND ") : "";
 }
 
@@ -123,6 +155,7 @@ function toRow(r: Record<string, unknown>): Row {
   return {
     label_name: String(r.label_name ?? ""),
     vendor_part_no: String(r.vendor_part_no ?? ""),
+    package_type: String(r.package_type ?? ""),
     vendor_name: String(r.vendor_name ?? ""),
     open_qty: Number(r.open_qty ?? 0),
     unissued_qty: Number(r.unissued_qty ?? 0),
@@ -158,6 +191,7 @@ FROM (
 SELECT
     ${sqlArrayStringConcat(engine, sqlGroupUniqArray(engine, "label_name"), ",")} AS label_name,
     vendor_part_no, vendor_name,
+    max(package_type) AS package_type,
     sum(open_qty)     AS open_qty,
     sum(unissued_qty) AS unissued_qty,
     sum(die_attach)   AS die_attach,
@@ -204,6 +238,7 @@ FROM (
   const totalRow: Row = {
     label_name: "合计",
     vendor_part_no: "",
+    package_type: "",
     vendor_name: "",
     open_qty: Number(t.open_qty ?? 0),
     unissued_qty: Number(t.unissued_qty ?? 0),
@@ -221,17 +256,21 @@ FROM (
 async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   const engine = client.engineType;
   const innerSql = INNER_SQL(engine);
-  const [labelR, vendorR] = await Promise.all([
+  const [labelR, vendorR, pkgR] = await Promise.all([
     client.query<{ label_name: string }>(
       `SELECT DISTINCT label_name FROM (${innerSql}) AS t WHERE label_name != '' ORDER BY label_name`,
     ),
     client.query<{ vendor_name: string }>(
       `SELECT DISTINCT vendor_name FROM (${innerSql}) AS t WHERE vendor_name != '' ORDER BY vendor_name`,
     ),
+    client.query<{ package_type: string }>(
+      `SELECT DISTINCT package_type FROM (${innerSql}) AS t WHERE package_type != '' ORDER BY package_type`,
+    ),
   ]);
   return {
     labelNames: labelR.map((r) => r.label_name),
     vendorNames: vendorR.map((r) => r.vendor_name),
+    packageTypes: pkgR.map((r) => r.package_type),
   };
 }
 
@@ -262,12 +301,14 @@ const plugin: ReportPlugin<
   inputSchema: z.object({
     labelName: z.string().optional(),
     vendorName: z.string().optional(),
+    packageType: z.string().optional(),
     page: z.number().min(1).default(1),
     pageSize: z.number().min(1).max(200).default(20),
   }),
   exportInputSchema: z.object({
     labelName: z.string().optional(),
     vendorName: z.string().optional(),
+    packageType: z.string().optional(),
   }),
   // 无参数
   filterOptionsInputSchema: undefined,
@@ -283,6 +324,7 @@ const plugin: ReportPlugin<
     totalRow: {
       label_name: "合计",
       vendor_part_no: "",
+      package_type: "",
       vendor_name: "",
       open_qty: 0,
       unissued_qty: 0,
@@ -295,7 +337,7 @@ const plugin: ReportPlugin<
       update_time: "",
     },
   },
-  emptyFilterOptions: { labelNames: [], vendorNames: [] },
+  emptyFilterOptions: { labelNames: [], vendorNames: [], packageTypes: [] },
 
   rowsForExcel: (exported) => exported.data,
 
@@ -309,10 +351,11 @@ const plugin: ReportPlugin<
       else if (input.labelName) parts.push(input.labelName);
       return parts;
     },
-    leftAlignCols: 3,
+    leftAlignCols: 4,
     columns: [
       { header: "标签品名",   width: 28, value: (r) => r.label_name },
       { header: "供应商料号", width: 18, value: (r) => r.vendor_part_no },
+      { header: "封装形式",   width: 14, value: (r) => r.package_type },
       { header: "供应商",     width: 18, value: (r) => r.vendor_name },
       { header: "未回货数量", width: 12, value: (r) => r.open_qty,
         totalValue: (rs) => rs.reduce((s, r) => s + (Number(r.open_qty) || 0), 0) },

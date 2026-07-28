@@ -67,6 +67,7 @@ export default function OutsourceOrderDetail() {
   const summaryDate = sp.get("summaryDate") ?? "";
   const summaryLabelName = sp.get("summaryLabelName") ?? "";
   const summaryVendorName = sp.get("summaryVendorName") ?? "";
+  const summaryPackageType = sp.get("summaryPackageType") ?? "";
   // 返回时的目标汇总表路径（默认回封装厂WIP汇总表，可被汇总表覆盖为在制品汇总表等）
   const backRoute = sp.get("backRoute") || "/reports/pkg-wip-summary";
 
@@ -192,6 +193,7 @@ export default function OutsourceOrderDetail() {
                 if (summaryDate) backParams.set("summaryDate", summaryDate);
                 if (summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
                 if (summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                if (summaryPackageType) backParams.set("summaryPackageType", summaryPackageType);
                 const qs = backParams.toString();
                 navigate(`${backRoute}${qs ? `?${qs}` : ""}`);
               }}

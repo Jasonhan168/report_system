@@ -241,6 +241,7 @@ export default function OrderWipDetail() {
   const pivotPackageType = sp.get("pivotPackageType") ?? "";
   const summaryLabelName = sp.get("summaryLabelName") ?? "";
   const summaryVendorName = sp.get("summaryVendorName") ?? "";
+  const summaryPackageType = sp.get("summaryPackageType") ?? "";
 
   const [vendorName,     setVendorName]     = useState(sp.get("vendorName") ?? "");
   const [packageType,    setPackageType]    = useState(sp.get("packageType") ?? "");
@@ -387,6 +388,7 @@ export default function OrderWipDetail() {
                 if (fromPivot && pivotPackageType) backParams.set("pivotPackageType", pivotPackageType);
                 if (fromSummary && summaryLabelName) backParams.set("summaryLabelName", summaryLabelName);
                 if (fromSummary && summaryVendorName) backParams.set("summaryVendorName", summaryVendorName);
+                if (fromSummary && summaryPackageType) backParams.set("summaryPackageType", summaryPackageType);
                 const qs = backParams.toString();
                 navigate(`${backRoute}${qs ? `?${qs}` : ""}`);
               }}
