@@ -53,6 +53,8 @@ interface Row {
 interface Input {
   vendorName?: string;
   packageType?: string;
+  /** "1" = 封装形式精确匹配（统计表下钻场景），否则模糊匹配 */
+  packageTypeExact?: string;
   label?: string;
   vendorPartNo?: string;
   productionType?: string;
@@ -141,7 +143,12 @@ WHERE package_type != ''
 function buildWhere(p: Input): string {
   const conds: string[] = ["1 = 1"];
   if (p.vendorName)     conds.push(`vendor_name = '${esc(p.vendorName)}'`);
-  if (p.packageType)    conds.push(`package_type = '${esc(p.packageType)}'`);
+  // 封装形式：下钻带 packageTypeExact=1 时精确匹配（保证数字对齐），手动筛选走模糊
+  if (p.packageType) {
+    conds.push(p.packageTypeExact === "1"
+      ? `package_type = '${esc(p.packageType)}'`
+      : `lower(package_type) LIKE lower('%${esc(p.packageType)}%')`);
+  }
   if (p.label)          conds.push(`label = '${esc(p.label)}'`);
   if (p.vendorPartNo)   conds.push(`vendor_part_no = '${esc(p.vendorPartNo)}'`);
   if (p.productionType) conds.push(`production_type = '${esc(p.productionType)}'`);
@@ -334,6 +341,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
   inputSchema: z.object({
     vendorName:     z.string().optional(),
     packageType:    z.string().optional(),
+    packageTypeExact: z.string().optional(),
     label:          z.string().optional(),
     vendorPartNo:   z.string().optional(),
     productionType: z.string().optional(),
@@ -344,6 +352,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
   exportInputSchema: z.object({
     vendorName:     z.string().optional(),
     packageType:    z.string().optional(),
+    packageTypeExact: z.string().optional(),
     label:          z.string().optional(),
     vendorPartNo:   z.string().optional(),
     productionType: z.string().optional(),

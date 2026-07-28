@@ -38,9 +38,11 @@ interface FuzzyComboboxProps {
   onChange: (v: string) => void;
   placeholder?: string;
   emptyText?: string;
+  /** 允许自由输入文本作为模糊查询关键字（不强制从选项中选择） */
+  allowFreeText?: boolean;
 }
 
-function FuzzyCombobox({ options, value, onChange, placeholder = "全部", emptyText = "无匹配项" }: FuzzyComboboxProps) {
+function FuzzyCombobox({ options, value, onChange, placeholder = "全部", emptyText = "无匹配项", allowFreeText = false }: FuzzyComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputVal, setInputVal] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,14 +56,14 @@ function FuzzyCombobox({ options, value, onChange, placeholder = "全部", empty
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
-        if (inputVal !== "" && !options.includes(inputVal)) {
+        if (!allowFreeText && inputVal !== "" && !options.includes(inputVal)) {
           setInputVal(value);
         }
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [inputVal, value, options]);
+  }, [inputVal, value, options, allowFreeText]);
 
   const filtered = inputVal.trim() === ""
     ? options
@@ -82,16 +84,23 @@ function FuzzyCombobox({ options, value, onChange, placeholder = "全部", empty
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputVal(e.target.value);
+    // 自由输入模式：输入内容实时提交为模糊查询关键字
+    if (allowFreeText) onChange(e.target.value);
     setOpen(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       setOpen(false);
-      setInputVal(value);
+      if (!allowFreeText) setInputVal(value);
     }
-    if (e.key === "Enter" && filtered.length > 0) {
-      handleSelect(filtered[0]);
+    if (e.key === "Enter") {
+      if (allowFreeText) {
+        onChange(inputVal);
+        setOpen(false);
+      } else if (filtered.length > 0) {
+        handleSelect(filtered[0]);
+      }
     }
   };
 
@@ -360,14 +369,15 @@ export default function PkgWipInprocSummary() {
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">
               封装形式
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
+              <span className="ml-1 text-muted-foreground/60 font-normal">（支持模糊查询）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.packageTypes ?? []}
               value={packageType}
               onChange={setPackageType}
-              placeholder="全部（可输入筛选）"
-              emptyText="无匹配的封装形式"
+              placeholder="全部（可输入关键字模糊查询）"
+              emptyText="无匹配的封装形式（可直接按关键字查询）"
+              allowFreeText
             />
           </div>
 

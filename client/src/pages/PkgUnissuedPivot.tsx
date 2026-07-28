@@ -288,6 +288,7 @@ export default function PkgUnissuedPivot() {
                                   const detailParams = new URLSearchParams({
                                     vendorName: v,
                                     packageType: row.packageType,
+                                    packageTypeExact: "1",
                                     ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
                                     fromPivot: "1",
                                     backRoute: "/reports/pkg-unissued-pivot",

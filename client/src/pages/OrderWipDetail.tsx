@@ -64,6 +64,8 @@ interface FuzzyComboboxProps {
   onChange: (v: string) => void;
   placeholder?: string;
   emptyText?: string;
+  /** 允许自由输入文本作为模糊查询关键字（不强制从选项中选择） */
+  allowFreeText?: boolean;
 }
 
 function FuzzyCombobox({
@@ -72,6 +74,7 @@ function FuzzyCombobox({
   onChange,
   placeholder = "全部",
   emptyText = "无匹配项",
+  allowFreeText = false,
 }: FuzzyComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputVal, setInputVal] = useState(value);
@@ -84,14 +87,14 @@ function FuzzyCombobox({
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
-        if (inputVal !== "" && !options.includes(inputVal)) {
+        if (!allowFreeText && inputVal !== "" && !options.includes(inputVal)) {
           setInputVal(value);
         }
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [inputVal, value, options]);
+  }, [inputVal, value, options, allowFreeText]);
 
   const filtered =
     inputVal.trim() === ""
@@ -113,16 +116,23 @@ function FuzzyCombobox({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputVal(e.target.value);
+    // 自由输入模式：输入内容实时提交为模糊查询关键字
+    if (allowFreeText) onChange(e.target.value);
     setOpen(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       setOpen(false);
-      setInputVal(value);
+      if (!allowFreeText) setInputVal(value);
     }
-    if (e.key === "Enter" && filtered.length > 0) {
-      handleSelect(filtered[0]);
+    if (e.key === "Enter") {
+      if (allowFreeText) {
+        onChange(inputVal);
+        setOpen(false);
+      } else if (filtered.length > 0) {
+        handleSelect(filtered[0]);
+      }
     }
   };
 
@@ -256,6 +266,8 @@ export default function OrderWipDetail() {
 
   const [queryParams, setQueryParams] = useState({
     vendorName: sp.get("vendorName") ?? "", packageType: sp.get("packageType") ?? "",
+    // 下钻场景封装形式精确匹配标志（"1"=精确），手动查询后清空走模糊
+    packageTypeExact: sp.get("packageTypeExact") ?? "",
     label: sp.get("label") ?? "", vendorPartNo: sp.get("vendorPartNo") ?? "",
     productionType: sp.get("productionType") ?? "", plant: sp.get("plant") ?? "",
     page: 1, pageSize: 20,
@@ -280,7 +292,7 @@ export default function OrderWipDetail() {
 
   const handleSearch = useCallback(() => {
     setQueryParams({
-      vendorName, packageType, label, vendorPartNo,
+      vendorName, packageType, packageTypeExact: "", label, vendorPartNo,
       productionType, plant, page: 1, pageSize,
     });
   }, [vendorName, packageType, label, vendorPartNo, productionType, plant, pageSize]);
@@ -304,6 +316,7 @@ export default function OrderWipDetail() {
       const params = new URLSearchParams({
         ...(queryParams.vendorName     ? { vendorName:     queryParams.vendorName }     : {}),
         ...(queryParams.packageType    ? { packageType:    queryParams.packageType }    : {}),
+        ...(queryParams.packageType && queryParams.packageTypeExact ? { packageTypeExact: queryParams.packageTypeExact } : {}),
         ...(queryParams.label          ? { label:          queryParams.label }          : {}),
         ...(queryParams.vendorPartNo   ? { vendorPartNo:   queryParams.vendorPartNo }   : {}),
         ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
@@ -452,14 +465,15 @@ export default function OrderWipDetail() {
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">
               封装形式
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
+              <span className="ml-1 text-muted-foreground/60 font-normal">（支持模糊查询）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.packageTypes ?? []}
               value={packageType}
               onChange={filterLocked ? () => {} : setPackageType}
-              placeholder="全部（可输入筛选）"
-              emptyText="无匹配的封装形式"
+              placeholder="全部（可输入关键字模糊查询）"
+              emptyText="无匹配的封装形式（可直接按关键字查询）"
+              allowFreeText={!filterLocked}
             />
           </div>
 
