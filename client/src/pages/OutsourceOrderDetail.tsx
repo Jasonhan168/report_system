@@ -227,9 +227,9 @@ export default function OutsourceOrderDetail() {
       </div>
 
       {/* 筛选栏 */}
-      <div className={`flex flex-wrap gap-2 items-end bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">日期</span>
+      <div className={`flex flex-wrap gap-x-4 gap-y-2 items-center bg-card border rounded-lg p-3 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">日期</span>
           <Input
             type="date"
             value={date}
@@ -238,8 +238,8 @@ export default function OutsourceOrderDetail() {
             readOnly={filterLocked}
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">工程量产</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">工程量产</span>
           <Select
             value={productionType || "__all__"}
             onValueChange={v => { if (!filterLocked) { setProductionType(v === "__all__" ? "" : v); setPage(1); } }}
@@ -252,8 +252,8 @@ export default function OutsourceOrderDetail() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">委外厂商</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">委外厂商</span>
           <Select
             value={vendorName || "__all__"}
             onValueChange={v => { if (!filterLocked) { setVendorName(v === "__all__" ? "" : v); setPage(1); } }}
@@ -266,8 +266,8 @@ export default function OutsourceOrderDetail() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">标签品名</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">标签品名</span>
           <Input
             value={labelName}
             onChange={e => { if (!filterLocked) { setLabelName(e.target.value); setPage(1); } }}
@@ -276,8 +276,8 @@ export default function OutsourceOrderDetail() {
             readOnly={filterLocked}
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">供应商料号</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">供应商料号</span>
           <Input
             value={vendorPartNo}
             onChange={e => { if (!filterLocked) { setVendorPartNo(e.target.value); setPage(1); } }}
@@ -286,8 +286,8 @@ export default function OutsourceOrderDetail() {
             readOnly={filterLocked}
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">分公司</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">分公司</span>
           <Select
             value={plant || "__all__"}
             onValueChange={v => { if (!filterLocked) { setPlant(v === "__all__" ? "" : v); setPage(1); } }}
@@ -300,7 +300,7 @@ export default function OutsourceOrderDetail() {
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="h-8 mt-4" onClick={() => { setPage(1); refetch(); }}>
+        <Button size="sm" className="h-8" onClick={() => { setPage(1); refetch(); }}>
           <Search className="w-4 h-4 mr-1" /> 查询
         </Button>
       </div>

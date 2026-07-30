@@ -158,27 +158,26 @@ export default function PkgUnissuedPivot() {
       {/* 查询条件 */}
       <div className="bg-card rounded-xl border border-border p-5 mb-5 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               封装形式
-              <span className="ml-1 text-muted-foreground/60 font-normal">（模糊匹配）</span>
             </Label>
             <Input
               value={packageType}
               onChange={(e) => setPackageType(e.target.value)}
-              placeholder="全部"
-              className="h-9 text-sm"
+              placeholder="全部（模糊匹配）"
+              className="h-9 text-sm flex-1 min-w-0"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               工程/量产
             </Label>
             <select
               value={productionType}
               onChange={(e) => setProductionType(e.target.value)}
-              className="h-9 w-full text-sm rounded-md border border-border bg-background px-3 focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-9 flex-1 min-w-0 text-sm rounded-md border border-border bg-background px-3 focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">全部</option>
               {(filterOpts?.productionTypes ?? []).map((pt) => (
@@ -187,7 +186,7 @@ export default function PkgUnissuedPivot() {
             </select>
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-center">
             <Button
               onClick={handleSearch}
               className="w-full h-9 gap-1.5 bg-primary hover:bg-primary/90"

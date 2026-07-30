@@ -127,7 +127,7 @@ function FuzzyCombobox({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex-1 min-w-0">
       <div className="relative flex items-center">
         <Input
           ref={inputRef}
@@ -360,10 +360,9 @@ export default function EngPkgWip() {
       <div className="bg-card rounded-xl border border-border p-4 shadow-sm flex-shrink-0">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 委外厂商 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               委外厂商
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.vendorNames ?? []}
@@ -375,10 +374,9 @@ export default function EngPkgWip() {
           </div>
 
           {/* 标签品名 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               标签品名
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.labels ?? []}
@@ -390,10 +388,9 @@ export default function EngPkgWip() {
           </div>
 
           {/* 封装形式 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               封装形式
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.packageTypes ?? []}
@@ -405,7 +402,7 @@ export default function EngPkgWip() {
           </div>
 
           {/* 查询按钮 */}
-          <div className="flex items-end">
+          <div className="flex items-center">
             <Button
               onClick={handleSearch}
               className="w-full h-9 gap-1.5 bg-primary hover:bg-primary/90"

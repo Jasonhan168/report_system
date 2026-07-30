@@ -101,7 +101,7 @@ function FuzzyCombobox({ options, value, onChange, placeholder = "全部", empty
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex-1 min-w-0">
       <div className="relative flex items-center">
         <Input
           ref={inputRef}
@@ -337,20 +337,19 @@ export default function PkgWipSummary() {
       {/* 查询条件 */}
       <div className="bg-card rounded-xl border border-border p-5 mb-5 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">查询日期</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">查询日期</Label>
             <Input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="h-9 text-sm"
+              className="h-9 text-sm flex-1 min-w-0"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               标签品名
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.labelNames ?? []}
@@ -361,10 +360,9 @@ export default function PkgWipSummary() {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               供应商
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.vendorNames ?? []}
@@ -375,7 +373,7 @@ export default function PkgWipSummary() {
             />
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-center">
             <Button
               onClick={handleSearch}
               className="w-full h-9 gap-1.5 bg-primary hover:bg-primary/90"

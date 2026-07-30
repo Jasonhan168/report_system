@@ -137,7 +137,7 @@ function FuzzyCombobox({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex-1 min-w-0">
       <div className="relative flex items-center">
         <Input
           ref={inputRef}
@@ -447,10 +447,9 @@ export default function OrderWipDetail() {
       <div className={`bg-card rounded-xl border border-border p-4 shadow-sm flex-shrink-0 ${filterLocked ? "ring-1 ring-blue-300 bg-blue-50/30" : ""}`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 委外厂商 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               委外厂商
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.vendorNames ?? []}
@@ -462,10 +461,9 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 封装形式 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               封装形式
-              <span className="ml-1 text-muted-foreground/60 font-normal">（支持模糊查询）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.packageTypes ?? []}
@@ -478,10 +476,9 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 标签品名 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               标签品名
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.labels ?? []}
@@ -493,10 +490,9 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 供应商料号 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               供应商料号
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.vendorPartNos ?? []}
@@ -508,10 +504,9 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 工程/量产 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               工程/量产
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.productionTypes ?? []}
@@ -523,10 +518,9 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 分公司 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
               分公司
-              <span className="ml-1 text-muted-foreground/60 font-normal">（可输入搜索）</span>
             </Label>
             <FuzzyCombobox
               options={filterOpts?.plants ?? []}
@@ -538,7 +532,7 @@ export default function OrderWipDetail() {
           </div>
 
           {/* 查询按钮 */}
-          <div className="flex items-end">
+          <div className="flex items-center">
             <Button
               onClick={handleSearch}
               className="w-full h-9 gap-1.5 bg-primary hover:bg-primary/90"
