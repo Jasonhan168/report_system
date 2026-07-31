@@ -81,6 +81,19 @@ export function getDorisPool(ds: Datasource): MySqlPool {
     connectTimeout: 30_000,
   });
 
+  // Doris 4.x 的 TopN 惰性物化优化在视图上有缺陷：ORDER BY + LIMIT 查询视图时，
+  // 非排序列会返回 NULL（apache/doris#61219）；且 SQL Cache 的缓存键不含会话变量，
+  // 会把错误结果缓存并持续返回。故对每个新建连接关闭这两项。
+  // 旧版本 Doris 可能没有该变量，SET 失败时仅告警不影响连接使用。
+  pool.on("connection", (conn) => {
+    conn.query("SET topn_lazy_materialization_threshold = 0", (err: unknown) => {
+      if (err) console.warn("[doris] SET topn_lazy_materialization_threshold 失败（可忽略）:", (err as Error).message);
+    });
+    conn.query("SET enable_sql_cache = false", (err: unknown) => {
+      if (err) console.warn("[doris] SET enable_sql_cache 失败（可忽略）:", (err as Error).message);
+    });
+  });
+
   _dorisClients.set(ds.id, pool);
   return pool;
 }

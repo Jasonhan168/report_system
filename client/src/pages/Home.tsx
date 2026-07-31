@@ -1,8 +1,8 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { BarChart3, ArrowRight, Clock } from "lucide-react";
+import { BarChart3, Clock } from "lucide-react";
 import { Link } from "wouter";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -18,15 +18,17 @@ export default function Home() {
   return (
     <div className="h-full flex flex-col p-6 gap-6">
       {/* 欢迎横幅 */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[oklch(0.32_0.14_252)] via-[oklch(0.28_0.12_255)] to-[oklch(0.22_0.10_260)] p-8 shadow-lg flex-shrink-0">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[oklch(0.32_0.14_252)] via-[oklch(0.28_0.12_255)] to-[oklch(0.22_0.10_260)] px-8 py-5 shadow-lg flex-shrink-0">
         <div className="relative z-10">
-          <div className="flex items-center gap-2 text-[oklch(0.72_0.16_75)] text-sm mb-3">
-            <Clock size={14} />
-            <span>{dateStr}</span>
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-2xl font-bold text-white mb-1">
+              你好，{user?.name || "用户"} 👋
+            </h1>
+            <div className="flex items-center gap-2 text-[oklch(0.72_0.16_75)] text-sm flex-shrink-0">
+              <Clock size={14} />
+              <span>{dateStr}</span>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            你好，{user?.name || "用户"} 👋
-          </h1>
           <p className="text-white/70 text-sm">欢迎使用昂宝集成电路报表查询系统，以下是您可访问的报表模块</p>
         </div>
         {/* 装饰圆形 */}
@@ -42,9 +44,9 @@ export default function Home() {
               <Skeleton className="h-4 w-4" />
               <Skeleton className="h-4 w-24" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-40 rounded-xl" />
+                <Skeleton key={i} className="h-28 rounded-xl" />
               ))}
             </div>
           </div>
@@ -63,35 +65,28 @@ export default function Home() {
                   <BarChart3 size={16} className="text-primary" />
                   <h2 className="text-sm font-semibold text-foreground">{category}</h2>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {items.map((module) => (
-                    <Card
-                      key={module.id}
-                      className="group hover:shadow-md transition-all duration-200 border-border hover:border-primary/30 cursor-pointer"
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
-                            <BarChart3 size={18} className="text-primary" />
+                    <Link key={module.id} href={module.route || "#"}>
+                      <Card
+                        className="group h-full py-4 gap-2 hover:shadow-md transition-all duration-200 border-border hover:border-primary/30 cursor-pointer"
+                      >
+                        <CardHeader className="px-4">
+                          <div className="flex items-start justify-between">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
+                              <BarChart3 size={15} className="text-primary" />
+                            </div>
+                            <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
+                              运行中
+                            </Badge>
                           </div>
-                          <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
-                            运行中
-                          </Badge>
-                        </div>
-                        <CardTitle className="text-base font-semibold">{module.name}</CardTitle>
-                        <CardDescription className="text-xs line-clamp-2">
-                          {module.description || "暂无描述"}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <Link href={module.route || "#"}>
-                          <div className={`flex items-center gap-1 text-sm font-medium group-hover:gap-2 transition-all ${module.route ? "text-primary" : "text-muted-foreground"}`}>
-                            {module.route ? "查看报表" : "暂未配置路由"}
-                            <ArrowRight size={14} />
-                          </div>
-                        </Link>
-                      </CardContent>
-                    </Card>
+                          <CardTitle className="text-sm font-semibold">{module.name}</CardTitle>
+                          <CardDescription className="text-xs line-clamp-2">
+                            {module.description || "暂无描述"}
+                          </CardDescription>
+                        </CardHeader>
+                      </Card>
+                    </Link>
                   ))}
                 </div>
               </div>
