@@ -17,6 +17,7 @@ import outsourceOrderDetail from "./outsource-order-detail";
 import pkgWipDetail from "./pkg-wip-detail";
 import pkgWipInprocDetail from "./pkg-wip-inproc-detail";
 import pkgWipInprocSummary from "./pkg-wip-inproc-summary";
+import pkgInprocSummary from "./pkg-inproc-summary";
 import engPkgWip from "./eng-pkg-wip";
 import pkgUnissuedPivot from "./pkg-unissued-pivot";
 import orderWipDetail from "./order-wip-detail";
@@ -29,9 +30,10 @@ export const ALL_REPORTS: ReportPlugin<any, any, any, any, any, any>[] = [
   pkgWipDetail,
   pkgWipInprocDetail,
   pkgWipInprocSummary,
+  pkgInprocSummary,
   engPkgWip,
   orderWipDetail,
   pkgUnissuedPivot,
 ];
 
-export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail, pkgWipInprocSummary, engPkgWip, orderWipDetail, pkgUnissuedPivot };
+export { pkgWipSummary, outsourceOrderDetail, pkgWipDetail, pkgWipInprocDetail, pkgWipInprocSummary, pkgInprocSummary, engPkgWip, orderWipDetail, pkgUnissuedPivot };

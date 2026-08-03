@@ -3,6 +3,7 @@
  *
  * 数据来源：v_dwd_order_wip
  * 展示形式：行=封装形式，列=供应商，值=未投数量
+ * 未投数量直接取视图字段 unissued_qty（ifNull 兜底 0），不再由后端反算
  * 行列均带合计
  */
 import { z } from "zod";
@@ -67,22 +68,11 @@ export interface ExportReturn {
 
 // ─── 核心 SQL ────────────────────────────────────────────────────────────────
 
-const UNISSUED_EXPR = `
-  (ifNull(open_qty, 0)
-   - ifNull(die_attach, 0)
-   - ifNull(wire_bond, 0)
-   - ifNull(molding, 0)
-   - ifNull(testing, 0)
-   - ifNull(test_done, 0)
-   - ifNull(stock_qty, 0)
-   - ifNull(in_transit_qty, 0))
-`;
-
 const BASE_SQL = `
 SELECT
   ifNull(package_type, '') AS package_type,
   ifNull(vendor_name, '')  AS vendor_name,
-  sum(${UNISSUED_EXPR}) AS unissued_qty
+  sum(ifNull(unissued_qty, 0)) AS unissued_qty
 FROM v_dwd_order_wip
 WHERE package_type != '' and vendor_name in (select distinct vendor_name from v_dws_ab_wip where vendor_name != '')
 `;

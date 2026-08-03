@@ -4,7 +4,8 @@
  * 数据来源：v_dwd_order_wip
  * 特点：
  *   - 展示委外订单各工序在制品明细
- *   - 增加计算字段：wip_total、unissued_qty、overdue_days
+ *   - 增加计算字段：wip_total、overdue_days
+ *   - 未投数量 unissued_qty 直接取视图字段（ifNull 兜底 0），不再由后端反算
  *   - 支持按委外厂商、封装形式、标签品名、供应商料号、工程/量产、分公司过滤
  */
 import { z } from "zod";
@@ -46,7 +47,7 @@ interface Row {
   plant: string;           // 分公司
   update_time: string;     // 更新时间
   wip_total: number;       // 在制品合计（计算字段）
-  unissued_qty: number;    // 未投数量（计算字段 = open_qty - wip_total - stock_qty - in_transit_qty）
+  unissued_qty: number;    // 未投数量（直接取视图字段）
   overdue_days: number;    // 拖期天数（计算字段）
 }
 
@@ -127,6 +128,7 @@ SELECT
     ifNull(open_qty, 0)          AS open_qty,
     ifNull(stock_qty, 0)         AS stock_qty,
     ifNull(in_transit_qty, 0)    AS in_transit_qty,
+    ifNull(unissued_qty, 0)      AS unissued_qty,
     ifNull(die_attach, 0)        AS die_attach,
     ifNull(wire_bond, 0)         AS wire_bond,
     ifNull(molding, 0)           AS molding,
@@ -195,7 +197,7 @@ function toRow(r: Record<string, unknown>): Row {
     plant:         String(r.plant          ?? ""),
     update_time:   String(r.update_time   ?? ""),
     wip_total:     wipTotal,
-    unissued_qty:  openQty - wipTotal - stockQty - inTransitQty,
+    unissued_qty:  Number(r.unissued_qty ?? 0),
     overdue_days:  computeOverdueDays(eddStr),
   };
 }
@@ -216,7 +218,7 @@ async function queryData(client: ReportDbClient, input: Input): Promise<QueryRet
 SELECT
   order_no, order_date, edd, process_type, production_type,
   vendor_name, part_no, lot_no, label, vendor_part_no, package_type,
-  order_qty, open_qty, stock_qty, in_transit_qty, die_attach, wire_bond, molding, testing, test_done,
+  order_qty, open_qty, stock_qty, in_transit_qty, unissued_qty, die_attach, wire_bond, molding, testing, test_done,
   plant, update_time
 FROM (${BASE_SQL}) AS t
 WHERE ${where}
@@ -230,6 +232,7 @@ SELECT
   ${sqlCastInt64(engine, "sum(open_qty)")}      AS open_qty,
   ${sqlCastInt64(engine, "sum(stock_qty)")}     AS stock_qty,
   ${sqlCastInt64(engine, "sum(in_transit_qty)")} AS in_transit_qty,
+  ${sqlCastInt64(engine, "sum(unissued_qty)")}  AS unissued_qty,
   ${sqlCastInt64(engine, "sum(die_attach)")}    AS die_attach,
   ${sqlCastInt64(engine, "sum(wire_bond)")}     AS wire_bond,
   ${sqlCastInt64(engine, "sum(molding)")}       AS molding,
@@ -253,6 +256,7 @@ WHERE ${where}`;
   const openQty   = Number(metaRow.open_qty   ?? 0);
   const stockQty  = Number(metaRow.stock_qty  ?? 0);
   const inTransitQty = Number(metaRow.in_transit_qty ?? 0);
+  const unissuedQty = Number(metaRow.unissued_qty ?? 0);
   const dieAttach = Number(metaRow.die_attach ?? 0);
   const wireBond  = Number(metaRow.wire_bond  ?? 0);
   const molding   = Number(metaRow.molding    ?? 0);
@@ -276,7 +280,7 @@ WHERE ${where}`;
     test_done:    testDone,
     update_time:  String(metaRow.update_time ?? ""),
     wip_total:    wipTotal,
-    unissued_qty: openQty - wipTotal - stockQty - inTransitQty,
+    unissued_qty: unissuedQty,
     overdue_days: 0,
   };
 

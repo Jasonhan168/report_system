@@ -11,6 +11,7 @@ import OutsourceOrderDetail from "@/pages/OutsourceOrderDetail";
 import PkgWipDetail from "@/pages/PkgWipDetail";
 import PkgWipInprocDetail from "@/pages/PkgWipInprocDetail";
 import PkgWipInprocSummary from "@/pages/PkgWipInprocSummary";
+import PkgInprocSummary from "@/pages/PkgInprocSummary";
 import EngPkgWip from "@/pages/EngPkgWip";
 import OrderWipDetail from "@/pages/OrderWipDetail";
 import PkgUnissuedPivot from "@/pages/PkgUnissuedPivot";
@@ -27,6 +28,7 @@ export const REPORT_ROUTES: ReportRoute[] = [
   { path: "/reports/pkg-wip-detail",          component: PkgWipDetail },
   { path: "/reports/pkg-wip-inproc-detail",   component: PkgWipInprocDetail },
   { path: "/reports/pkg-wip-inproc-summary",  component: PkgWipInprocSummary },
+  { path: "/reports/pkg-inproc-summary",      component: PkgInprocSummary },
   { path: "/reports/eng-pkg-wip",             component: EngPkgWip },
   { path: "/reports/order-wip-detail",        component: OrderWipDetail },
   { path: "/reports/pkg-unissued-pivot",      component: PkgUnissuedPivot },
