@@ -1,0 +1,575 @@
+import { trpc } from "@/lib/trpc";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useAutoTitles } from "@/hooks/useAutoTitles";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { Download, Search, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, X, ChevronsUpDown } from "lucide-react";
+import { cn, localToday } from "@/lib/utils";
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+function fmtCell(n: number) {
+  return n === 0 ? "" : n.toLocaleString("zh-CN");
+}
+
+// 将 update_time 格式化为 yyyy-mm-dd；空值或 0000-00-00 显示为空
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return "";
+  const d = v.slice(0, 10);
+  if (!d || d.startsWith("0000-00-00") || d === "1970-01-01") return "";
+  return d;
+}
+
+// ─── 可输入模糊搜索 Combobox ───────────────────────────────────────────────
+interface FuzzyComboboxProps {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  emptyText?: string;
+  /** 允许自由输入文本作为模糊查询关键字（不强制从选项中选择） */
+  allowFreeText?: boolean;
+}
+
+function FuzzyCombobox({ options, value, onChange, placeholder = "全部", emptyText = "无匹配项", allowFreeText = false }: FuzzyComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [inputVal, setInputVal] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setInputVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        if (!allowFreeText && inputVal !== "" && !options.includes(inputVal)) {
+          setInputVal(value);
+        }
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [inputVal, value, options, allowFreeText]);
+
+  const filtered = inputVal.trim() === ""
+    ? options
+    : options.filter((o) => o.toLowerCase().includes(inputVal.toLowerCase()));
+
+  const handleSelect = (opt: string) => {
+    onChange(opt);
+    setInputVal(opt);
+    setOpen(false);
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange("");
+    setInputVal("");
+    setOpen(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputVal(e.target.value);
+    // 自由输入模式：输入内容实时提交为模糊查询关键字
+    if (allowFreeText) onChange(e.target.value);
+    setOpen(true);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      if (!allowFreeText) setInputVal(value);
+    }
+    if (e.key === "Enter") {
+      if (allowFreeText) {
+        onChange(inputVal);
+        setOpen(false);
+      } else if (filtered.length > 0) {
+        handleSelect(filtered[0]);
+      }
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative flex-1 min-w-0">
+      <div className="relative flex items-center">
+        <Input
+          ref={inputRef}
+          value={inputVal}
+          onChange={handleInputChange}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="h-9 text-sm pr-14"
+          autoComplete="off"
+        />
+        <div className="absolute right-0 flex items-center pr-1 gap-0.5">
+          {inputVal !== "" && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              tabIndex={-1}
+            >
+              <X size={12} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setOpen((o) => !o); inputRef.current?.focus(); }}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            tabIndex={-1}
+          >
+            <ChevronsUpDown size={13} />
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg">
+          <div className="max-h-52 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => handleSelect("")}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors",
+                value === "" && "bg-primary/10 font-medium text-primary"
+              )}
+            >
+              全部
+            </button>
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground text-center">{emptyText}</div>
+            ) : (
+              filtered.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => handleSelect(opt)}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors truncate",
+                    value === opt && "bg-primary/10 font-medium text-primary"
+                  )}
+                  title={opt}
+                >
+                  {inputVal.trim() ? highlightMatch(opt, inputVal) : opt}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function highlightMatch(text: string, keyword: string) {
+  const idx = text.toLowerCase().indexOf(keyword.toLowerCase());
+  if (idx === -1) return <span>{text}</span>;
+  return (
+    <span>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/20 text-primary rounded-sm px-0.5">{text.slice(idx, idx + keyword.length)}</mark>
+      {text.slice(idx + keyword.length)}
+    </span>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
+export default function PkgInprocSummary() {
+  const [, navigate] = useLocation();
+
+  // 从 URL 读取返回时恢复的筛选条件（明细表点击“返回汇总表”时携带）
+  const initParams = new URLSearchParams(window.location.search);
+  const initLabelName = initParams.get("summaryLabelName") || "";
+  const initVendorName = initParams.get("summaryVendorName") || "";
+  const initPackageType = initParams.get("summaryPackageType") || "";
+
+  const [labelName, setLabelName] = useState(initLabelName);
+  const [vendorName, setVendorName] = useState(initVendorName);
+  const [packageType, setPackageType] = useState(initPackageType);
+  const [pageSize, setPageSize] = useState(20);
+
+  const [queryParams, setQueryParams] = useState({
+    labelName: initLabelName, vendorName: initVendorName, packageType: initPackageType, page: 1, pageSize: 20,
+  });
+
+  const { data: viewPerm } = trpc.pkgInprocSummary.checkPermission.useQuery({ type: "view" });
+  const { data: exportPerm } = trpc.pkgInprocSummary.checkPermission.useQuery({ type: "export" });
+  const { data: moduleMeta } = trpc.reportModules.getByCode.useQuery({ code: "pkg_inproc_summary" });
+  const logClient = trpc.operationLogs.logClient.useMutation();
+
+  // 下钻时记录日志并跳转
+  const drillTo = useCallback(
+    (targetCode: string, targetRoute: string, queryString: string, extraParams?: Record<string, unknown>) => {
+      logClient.mutate({
+        action: "drill_down",
+        resourceCode: targetCode,
+        params: { fromCode: "pkg_inproc_summary", queryString, ...(extraParams ?? {}) },
+      });
+      navigate(`${targetRoute}?${queryString}`);
+    },
+    [logClient, navigate],
+  );
+
+  const { data: filterOpts } = trpc.pkgInprocSummary.filterOptions.useQuery(
+    undefined,
+    { enabled: !!viewPerm?.allowed }
+  );
+
+  const { data, isLoading, isFetching, error, refetch } = trpc.pkgInprocSummary.query.useQuery(
+    queryParams,
+    { enabled: !!viewPerm?.allowed }
+  );
+
+  // 表格容器 ref：用于自动为单元格注入 title 属性（悬停显示完整内容）
+  const tableRef = useRef<HTMLDivElement>(null);
+  useAutoTitles(tableRef, [data]);
+
+  const handleSearch = useCallback(() => {
+    setQueryParams({ labelName, vendorName, packageType, page: 1, pageSize });
+  }, [labelName, vendorName, packageType, pageSize]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setQueryParams((prev) => ({ ...prev, page: newPage }));
+  }, []);
+
+  const handlePageSizeChange = useCallback((val: string) => {
+    const ps = parseInt(val);
+    setPageSize(ps);
+    setQueryParams((prev) => ({ ...prev, pageSize: ps, page: 1 }));
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    if (!exportPerm?.allowed) {
+      toast.error("您没有导出权限");
+      return;
+    }
+    try {
+      const params = new URLSearchParams({
+        ...(queryParams.labelName ? { labelName: queryParams.labelName } : {}),
+        ...(queryParams.vendorName ? { vendorName: queryParams.vendorName } : {}),
+        ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
+      });
+      const resp = await fetch(`/api/export/pkg-inproc-summary?${params.toString()}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "导出失败" }));
+        toast.error(err.error || "导出失败，请重试");
+        return;
+      }
+      const blob = await resp.blob();
+      if (blob.size === 0) {
+        toast.warning("没有可导出的数据");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const today = localToday();
+      const nameParts = ["封装在制品汇总表", today];
+      if (queryParams.vendorName) nameParts.push(queryParams.vendorName);
+      else if (queryParams.labelName) nameParts.push(queryParams.labelName);
+      a.download = `${nameParts.join("_")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("导出成功");
+    } catch (e) {
+      console.error(e);
+      toast.error("导出失败，请重试");
+    }
+  }, [exportPerm, queryParams]);
+
+  const totalPages = data ? Math.ceil(data.total / queryParams.pageSize) : 0;
+
+  if (viewPerm && !viewPerm.allowed) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4 text-muted-foreground">
+        <AlertCircle size={40} className="opacity-40" />
+        <p className="text-sm">您没有查看此报表的权限</p>
+        <p className="text-xs">请联系管理员分配权限</p>
+      </div>
+    );
+  }
+
+  const COL_COUNT = 13;
+  const headers = ["标签品名", "供应商料号", "封装形式", "供应商", "未回货数量", "未投数量", "装片", "焊线", "塑封", "测试", "测试后", "在制品总数", "更新时间"];
+  const TODAY = localToday();
+
+  return (
+    <div ref={tableRef} className="p-6 report-page">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">封装在制品汇总表</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">{moduleMeta?.description || ""}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-1.5">
+            <RefreshCw size={13} className={cn(isFetching && "animate-spin")} />
+            刷新
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleExport}
+            disabled={!exportPerm?.allowed}
+            className="gap-1.5 bg-primary hover:bg-primary/90"
+          >
+            <Download size={13} />
+            导出Excel
+          </Button>
+        </div>
+      </div>
+
+      {/* 查询条件 */}
+      <div className="bg-card rounded-xl border border-border p-5 mb-5 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
+              标签品名
+            </Label>
+            <FuzzyCombobox
+              options={filterOpts?.labelNames ?? []}
+              value={labelName}
+              onChange={setLabelName}
+              placeholder="全部（可输入筛选）"
+              emptyText="无匹配的标签品名"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
+              供应商
+            </Label>
+            <FuzzyCombobox
+              options={filterOpts?.vendorNames ?? []}
+              value={vendorName}
+              onChange={setVendorName}
+              placeholder="全部（可输入筛选）"
+              emptyText="无匹配的供应商"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0">
+              封装形式
+            </Label>
+            <FuzzyCombobox
+              options={filterOpts?.packageTypes ?? []}
+              value={packageType}
+              onChange={setPackageType}
+              placeholder="全部（可输入关键字模糊查询）"
+              emptyText="无匹配的封装形式（可直接按关键字查询）"
+              allowFreeText
+            />
+          </div>
+
+          <div className="flex items-center">
+            <Button
+              onClick={handleSearch}
+              className="w-full h-9 gap-1.5 bg-primary hover:bg-primary/90"
+              size="sm"
+            >
+              <Search size={13} />
+              查询
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* 数据表格 */}
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
+          <div className="flex items-center gap-2">
+            {data && (
+              <span className="text-xs text-muted-foreground">
+                共 <span className="font-semibold text-foreground">{data.total}</span> 条记录
+              </span>
+            )}
+            {isFetching && !isLoading && (
+              <Badge variant="secondary" className="text-xs">更新中...</Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">每页</span>
+            <Select value={String(queryParams.pageSize)} onValueChange={handlePageSizeChange}>
+              <SelectTrigger className="h-7 w-16 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">条</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table className="text-sm">
+            <TableHeader>
+              <TableRow className="bg-secondary/50 hover:bg-secondary/50">
+                {headers.map((h, i) => (
+                  <TableHead
+                    key={h}
+                    className={cn(
+                      "text-xs font-semibold text-foreground whitespace-nowrap px-3 py-3",
+                      i >= 4 && i <= 11 && "text-right"
+                    )}
+                  >
+                    {h}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: COL_COUNT }).map((_, j) => (
+                      <TableCell key={j} className="px-3 py-2.5"><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground">
+                    <AlertCircle size={24} className="mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">加载失败，请重试</p>
+                  </TableCell>
+                </TableRow>
+              ) : data?.data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={COL_COUNT} className="text-center py-12 text-muted-foreground text-sm">暂无数据</TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {data?.data.map((row, idx) => {
+                    const rowAny = row as typeof row & { wip_qty?: number; order_nos?: string[] };
+                    // 返回汇总表时恢复筛选用的参数
+                    const summaryBack = {
+                      ...(queryParams.labelName ? { summaryLabelName: queryParams.labelName } : {}),
+                      ...(queryParams.vendorName ? { summaryVendorName: queryParams.vendorName } : {}),
+                      ...(queryParams.packageType ? { summaryPackageType: queryParams.packageType } : {}),
+                    };
+                    // 跳转封装在制品明细表（点击在制品总数）
+                    // 注：汇总表已按 vendor_part_no + vendor_name 分组，label_name 为拼接值
+                    //       传给明细表做 = 精确匹配会导致无匹配，故不传 label
+                    const orderWipDetailParams = new URLSearchParams({
+                      ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
+                      ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      backRoute: "/reports/pkg-inproc-summary",
+                      ...summaryBack,
+                    }).toString();
+                    // 跳转委外订单明细表（点击未回货数量）
+                    const outsourceBase = new URLSearchParams({
+                      date: TODAY,
+                      ...(row.label_name ? { labelName: row.label_name } : {}),
+                      ...(row.vendor_part_no ? { vendorPartNo: row.vendor_part_no } : {}),
+                      ...(row.vendor_name ? { vendorName: row.vendor_name } : {}),
+                      fromSummary: "1",
+                      backRoute: "/reports/pkg-inproc-summary",
+                      ...summaryBack,
+                    });
+                    if (rowAny.order_nos && rowAny.order_nos.length > 0) {
+                      rowAny.order_nos.forEach((no) => outsourceBase.append("orderNos", no));
+                    }
+                    const outsourceParams = outsourceBase.toString();
+                    return (
+                    <TableRow key={idx} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-[oklch(0.975_0.005_252)]")}>
+                      <TableCell className="px-3 py-2.5 font-medium text-xs">{row.label_name}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.vendor_part_no}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs">{row.package_type}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs">{row.vendor_name}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {rowAny.open_qty ? (
+                          <button type="button" className="text-blue-600 underline hover:text-blue-400 transition-colors cursor-pointer" onClick={() => drillTo("outsource_order_detail", "/reports/outsource-order-detail", outsourceParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
+                            {fmtCell(rowAny.open_qty)}
+                          </button>
+                        ) : ""}
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">
+                        {fmtCell(row.unissued_qty)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.die_attach)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.wire_bond)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.molding)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.testing)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs">{fmtCell(row.test_done)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right text-xs font-semibold">
+                        {rowAny.wip_qty && rowAny.wip_qty !== 0 ? (
+                          <button type="button" className="text-primary underline hover:text-primary/70 transition-colors cursor-pointer" onClick={() => drillTo("order_wip_detail", "/reports/order-wip-detail", orderWipDetailParams, { labelName: row.label_name, vendorName: row.vendor_name })}>
+                            {fmtCell(rowAny.wip_qty)}
+                          </button>
+                        ) : ""}
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(row.update_time)}</TableCell>
+                    </TableRow>
+                    );
+                  })}
+                  {data?.totalRow && (
+                    <TableRow className="bg-[oklch(0.93_0.02_252)] border-t-2 border-primary/20">
+                      <TableCell className="px-3 py-3 font-bold text-xs text-primary" colSpan={4}>合计</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell((data.totalRow as typeof data.totalRow & { open_qty?: number }).open_qty ?? 0)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.unissued_qty)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.die_attach)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.wire_bond)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.molding)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.testing)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold">{fmtCell(data.totalRow.test_done)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold text-primary">{fmtCell((data.totalRow as typeof data.totalRow & { wip_qty?: number }).wip_qty ?? 0)}</TableCell>
+                      <TableCell />
+                    </TableRow>
+                  )}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-secondary/20">
+            <span className="text-xs text-muted-foreground">第 {queryParams.page} / {totalPages} 页</span>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={queryParams.page <= 1} onClick={() => handlePageChange(queryParams.page - 1)}>
+                <ChevronLeft size={13} />
+              </Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let p = i + 1;
+                if (totalPages > 5) {
+                  if (queryParams.page <= 3) p = i + 1;
+                  else if (queryParams.page >= totalPages - 2) p = totalPages - 4 + i;
+                  else p = queryParams.page - 2 + i;
+                }
+                return (
+                  <Button key={p} variant={p === queryParams.page ? "default" : "outline"} size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => handlePageChange(p)}>
+                    {p}
+                  </Button>
+                );
+              })}
+              <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={queryParams.page >= totalPages} onClick={() => handlePageChange(queryParams.page + 1)}>
+                <ChevronRight size={13} />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
