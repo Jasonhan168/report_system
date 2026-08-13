@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerExportRoutes } from "../export";
+import { registerWipStatusRoutes } from "../wipStatus";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -41,6 +42,8 @@ async function startServer() {
   }
   // 文件导出路由（Excel 下载等）
   registerExportRoutes(app);
+  // WIP 日报接收状态更新 REST 端点（供外部解析系统调用）
+  registerWipStatusRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",

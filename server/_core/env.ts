@@ -15,4 +15,6 @@ export const ENV = {
   // true  = 每次启动覆盖（默认，开发/测试环境保持元数据最新）
   // false = 仅插入新模块，不覆盖已有记录（生产环境避免覆盖管理员后台修改）
   syncReportMetaOnStartup: process.env.SYNC_REPORT_META_ON_STARTUP !== "false",
+  // WIP 日报接收状态更新 API Key（外部解析系统调用 /api/wip-daily-status/update 时鉴权）
+  wipStatusApiKey: process.env.WIP_STATUS_API_KEY ?? "",
 };

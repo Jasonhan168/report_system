@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import WipDailyStatusPanel from "@/components/WipDailyStatusPanel";
 
 const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
@@ -18,6 +19,7 @@ export default function Home() {
   return (
     <div className="h-full flex flex-col p-6 gap-6">
       {/* 欢迎横幅 */}
+      {/*
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[oklch(0.32_0.14_252)] via-[oklch(0.28_0.12_255)] to-[oklch(0.22_0.10_260)] px-8 py-5 shadow-lg flex-shrink-0">
         <div className="relative z-10">
           <div className="flex items-start justify-between gap-4">
@@ -31,10 +33,13 @@ export default function Home() {
           </div>
           <p className="text-white/70 text-sm">欢迎使用昂宝集成电路报表查询系统，以下是您可访问的报表模块</p>
         </div>
-        {/* 装饰圆形 */}
         <div className="absolute right-0 top-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/3 translate-x-1/4" />
         <div className="absolute right-16 bottom-0 w-32 h-32 rounded-full bg-white/5 translate-y-1/2" />
       </div>
+      */}
+
+      {/* WIP 日报接收状态看板 */}
+      <WipDailyStatusPanel />
 
       {/* 报表模块分组：flex-1 占满剩余空间 */}
       <div className="flex-1 min-h-0 overflow-y-auto">

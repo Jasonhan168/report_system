@@ -30,6 +30,7 @@ import { authenticate, hashPassword, verifyPassword } from "./auth";
 import { logOperation } from "./_core/operationLog";
 import { sdk } from "./_core/sdk";
 import { ENV } from "./_core/env";
+import { getWipDailyStatus } from "./wipStatus";
 
 // ─── 管理员鉴权中间件 ──────────────────────────────────────────────────────────
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -452,6 +453,15 @@ export const appRouter = router({
           req: ctx.req,
         });
         return { success: true };
+      }),
+  }),
+
+  // ─── WIP 日报接收状态 ─────────────────────────────────────────────────────
+  wipDailyStatus: router({
+    list: protectedProcedure
+      .input(z.object({ date: z.string().optional() }))
+      .query(async ({ input }) => {
+        return getWipDailyStatus(input.date);
       }),
   }),
 
