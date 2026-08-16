@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, SESSION_IDLE_TIMEOUT_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -104,11 +104,11 @@ export const appRouter = router({
         // 创建 JWT session
         const sessionToken = await sdk.createSessionToken(authResult.openId, {
           name: authResult.name,
-          expiresInMs: ONE_YEAR_MS,
+          expiresInMs: SESSION_IDLE_TIMEOUT_MS,
         });
 
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_IDLE_TIMEOUT_MS });
 
         const user = await getUserByOpenId(authResult.openId);
 

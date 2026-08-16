@@ -1,12 +1,13 @@
-import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { AXIOS_TIMEOUT_MS, COOKIE_NAME, SESSION_IDLE_TIMEOUT_MS } from "@shared/const";
 import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { getSessionCookieOptions } from "./cookies";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -185,7 +186,7 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expiresInMs = options.expiresInMs ?? SESSION_IDLE_TIMEOUT_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
@@ -195,13 +196,14 @@ class SDKServer {
       name: payload.name,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setIssuedAt()
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
   }
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; exp: number } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -212,7 +214,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, exp } = payload as Record<string, unknown>;
 
       // openId 是必须的；appId 在本地/LDAP 模式下可能为空字符串，允许通过
       if (!isNonEmptyString(openId)) {
@@ -220,15 +222,51 @@ class SDKServer {
         return null;
       }
 
+      const expValue = typeof exp === "number" ? exp : 0;
+
+      // 拒绝剩余有效期超过空闲超时上限的旧 token（迁移前签发的 1 年长期 token）
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      if (expValue > nowSeconds + SESSION_IDLE_TIMEOUT_MS / 1000) {
+        console.warn("[Auth] Session token expiration exceeds idle timeout limit, rejecting");
+        return null;
+      }
+
       return {
         openId,
         appId: typeof appId === "string" ? appId : "",
         name: typeof name === "string" ? name : "",
+        exp: expValue,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
       return null;
     }
+  }
+
+  /**
+   * 滑动续期：当 JWT 剩余有效期不足一半时重新签发并更新 cookie
+   */
+  private async renewSessionIfNeeded(
+    req: Request,
+    res: Response | undefined,
+    openId: string,
+    name: string,
+    exp: number
+  ): Promise<void> {
+    if (!res) return;
+
+    const remainingMs = exp * 1000 - Date.now();
+    if (remainingMs >= SESSION_IDLE_TIMEOUT_MS / 2) return;
+
+    const newToken = await this.createSessionToken(openId, {
+      name,
+      expiresInMs: SESSION_IDLE_TIMEOUT_MS,
+    });
+    const cookieOptions = getSessionCookieOptions(req);
+    res.cookie(COOKIE_NAME, newToken, {
+      ...cookieOptions,
+      maxAge: SESSION_IDLE_TIMEOUT_MS,
+    });
   }
 
   async getUserInfoWithJwt(
@@ -259,7 +297,7 @@ class SDKServer {
    * Authenticate a request using local JWT (for local/ldap auth modes)
    * Does NOT call external OAuth server
    */
-  async authenticateLocalRequest(req: Request): Promise<User> {
+  async authenticateLocalRequest(req: Request, res?: Response): Promise<User> {
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -278,6 +316,9 @@ class SDKServer {
       throw ForbiddenError("Account is disabled");
     }
 
+    // 滑动续期：剩余有效期不足一半时刷新 token
+    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp);
+
     // Update last sign-in time
     await db.upsertUser({
       openId: user.openId,
@@ -287,7 +328,7 @@ class SDKServer {
     return user;
   }
 
-  async authenticateRequest(req: Request): Promise<User> {
+  async authenticateRequest(req: Request, res?: Response): Promise<User> {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
@@ -327,6 +368,9 @@ class SDKServer {
       openId: user.openId,
       lastSignedIn: signedInAt,
     });
+
+    // 滑动续期
+    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp);
 
     return user;
   }

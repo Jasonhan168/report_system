@@ -17,10 +17,10 @@ export async function createContext(
   try {
     if (ENV.authMode === "oauth") {
       // Manus OAuth 模式：使用平台 SDK 验证
-      user = await sdk.authenticateRequest(opts.req);
+      user = await sdk.authenticateRequest(opts.req, opts.res);
     } else {
       // local / ldap 模式：直接验证本地 JWT cookie
-      user = await sdk.authenticateLocalRequest(opts.req);
+      user = await sdk.authenticateLocalRequest(opts.req, opts.res);
     }
   } catch (error) {
     // Authentication is optional for public procedures.
