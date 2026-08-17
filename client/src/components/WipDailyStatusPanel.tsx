@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Clock, AlertCircle, ClipboardList } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, ClipboardList, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -55,6 +55,9 @@ export default function WipDailyStatusPanel() {
             <span className="flex items-center gap-1 text-[11px] text-green-700">
               <CheckCircle2 size={18} /> 已接收
             </span>
+            <span className="flex items-center gap-1 text-[11px] text-blue-600">
+              <Loader2 size={18} /> Loading
+            </span>
             <span className="flex items-center gap-1 text-[11px] text-amber-600">
               <Clock size={18} /> 未接收
             </span>
@@ -79,15 +82,17 @@ export default function WipDailyStatusPanel() {
         ) : (
           <div className="flex flex-wrap gap-2">
             {vendors.map((v) => {
-              const isReceived = v.status === 1;
+              const isReceived = v.status === 2;
+              const isLoading = v.status === 1;
+              const borderClass = isReceived
+                ? "border-green-200 bg-green-50/50"
+                : isLoading
+                  ? "border-blue-200 bg-blue-50/50"
+                  : "border-border bg-card";
               return (
                 <div
                   key={v.vendor_code}
-                  className={`flex items-center justify-between rounded-md border px-2 py-1.5 w-[7.25rem] flex-shrink-0 ${
-                    isReceived
-                      ? "border-green-200 bg-green-50/50"
-                      : "border-border bg-card"
-                  }`}
+                  className={`flex items-center justify-between rounded-md border px-2 py-1.5 w-[7.25rem] flex-shrink-0 ${borderClass}`}
                 >
                   <div className="flex flex-col min-w-0">
                     <span className="text-xs font-medium truncate" title={v.vendor_name}>
@@ -97,12 +102,16 @@ export default function WipDailyStatusPanel() {
                       <span className="text-[10px] text-muted-foreground leading-tight">
                         {fmtTime(v.receive_time)}
                       </span>
+                    ) : isLoading ? (
+                      <span className="text-[10px] text-blue-600 leading-tight">Loading...</span>
                     ) : (
                       <span className="text-[10px] text-amber-600 leading-tight">未接收</span>
                     )}
                   </div>
                   {isReceived ? (
                     <CheckCircle2 size={18} className="text-green-600 flex-shrink-0 ml-1" />
+                  ) : isLoading ? (
+                    <Loader2 size={18} className="text-blue-500 flex-shrink-0 ml-1 animate-spin" />
                   ) : (
                     <Clock size={18} className="text-amber-500 flex-shrink-0 ml-1" />
                   )}

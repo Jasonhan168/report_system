@@ -17,7 +17,7 @@ export interface VendorStatusRow {
   vendor_code: string;
   vendor_name: string;
   receive_time: string | null;
-  status: number; // 1=已接收, 0=未接收
+  status: number; // 0=未接收, 1=Loading..., 2=已接收
 }
 
 export interface WipDailyStatusSummary {
@@ -60,7 +60,7 @@ export async function getWipDailyStatus(date?: string): Promise<WipDailyStatusRe
       v.vendor_code,
       v.vendor_name,
       s.data_time AS receive_time,
-      CASE WHEN s.vendor_code IS NOT NULL THEN 1 ELSE 0 END AS status
+      COALESCE(s.update_status, 0) AS status
     FROM dim_vendor v
     LEFT JOIN dwd_ab_wip_receive_status s
       ON v.vendor_code = s.vendor_code
@@ -69,7 +69,7 @@ export async function getWipDailyStatus(date?: string): Promise<WipDailyStatusRe
   `;
 
   const rows = await client.query<VendorStatusRow>(sql);
-  const received = rows.filter((r) => r.status === 1).length;
+  const received = rows.filter((r) => r.status === 2).length;
 
   return {
     vendors: rows,
