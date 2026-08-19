@@ -9,6 +9,25 @@
 CREATE DATABASE IF NOT EXISTS wip_db;
 
 -- ------------------------------------------------------------
+-- 维度表: dim_vendor
+-- 说明: 供应商维度表, 注册所有已知供应商, 插件加载时自动同步
+--       UNIQUE KEY 模型 + sequence_col(data_time) 保留最新行
+-- ------------------------------------------------------------
+CREATE TABLE wip_db.dim_vendor
+(
+    `vendor_code`    VARCHAR(64)  COMMENT '供应商编码',
+    `vendor_name`    VARCHAR(128) DEFAULT '' COMMENT '供应商名称',
+    `data_time`      DATETIME     NOT NULL COMMENT '最近更新时间(版本列)'
+)
+UNIQUE KEY(`vendor_code`)
+DISTRIBUTED BY HASH(`vendor_code`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "3",
+    "enable_unique_key_merge_on_write" = "true",
+    "function_column.sequence_col" = "data_time"
+);
+
+-- ------------------------------------------------------------
 -- 表1: dwd_ab_wip
 -- 说明: UNIQUE KEY 模型 + sequence_col(data_time) 自动保留最新行,
 --       无需像 ClickHouse 那样通过 argMax 视图手动去重
@@ -32,10 +51,10 @@ CREATE TABLE wip_db.dwd_ab_wip
     `order_qty`      BIGINT       DEFAULT 0 COMMENT '订单数量',
     `before_attach`  BIGINT       DEFAULT 0 COMMENT '待固晶',
     `stock_in`       BIGINT       DEFAULT 0 COMMENT '入库数',
-    `stock_qty`      BIGINT       DEFAULT 0 COMMENT '库存数量',
+    `stock_qty`      BIGINT       DEFAULT 0,
     `stock_good`     BIGINT       DEFAULT 0 COMMENT '库存良品数',
     `stock_fail`     BIGINT       DEFAULT 0 COMMENT '库存不良数',
-    `delivery_qty`   BIGINT       DEFAULT 0 COMMENT '发货数量',
+    `delivery_qty`   BIGINT       DEFAULT 0,
     `package_type`   VARCHAR(64)  DEFAULT '' COMMENT '封装类型',
     `fully_issued`   BOOLEAN      DEFAULT FALSE COMMENT '投料完毕'
 )
@@ -165,6 +184,62 @@ PROPERTIES (
     "function_column.sequence_col" = "data_time"
 );
 
+-- ------------------------------------------------------------
+-- 表5: dws_ab_delivery
+-- 说明: 发货汇总表, 按 (order_no, vendor_part_no, batch_no) 汇总发货良品/不良品数
+--       UNIQUE KEY 模型 + sequence_col(update_time) 保留最新行
+--       与 mv_dwd_ab_delivery_agg 功能类似, 但作为基表供其他视图关联
+-- ------------------------------------------------------------
+CREATE TABLE wip_db.dws_ab_delivery
+(
+    `order_no`       VARCHAR(64)  COMMENT '委外单号',
+    `vendor_part_no` VARCHAR(64)  COMMENT '供应商料号',
+    `batch_no`       VARCHAR(64)  DEFAULT '' COMMENT '批号',
+    `good_qty`       BIGINT       DEFAULT 0 COMMENT '良品数',
+    `fail_qty`       BIGINT       DEFAULT 0 COMMENT '不良品数',
+    `update_time`    DATETIME     NOT NULL COMMENT '数据更新时间(版本列)'
+)
+UNIQUE KEY(`order_no`, `vendor_part_no`, `batch_no`)
+DISTRIBUTED BY HASH(`order_no`) BUCKETS 6
+PROPERTIES (
+    "replication_num" = "3",
+    "colocate_with" = "wip_group",
+    "enable_unique_key_merge_on_write" = "true",
+    "function_column.sequence_col" = "update_time"
+);
+
+-- ------------------------------------------------------------
+-- 表6: dwd_ab_wip_receive_status
+-- 说明: WIP日报接收状态表, 记录每日每供应商的日报接收/解析状态
+--       AGGREGATE KEY 模型: vendor_name/file_count/update_status/data_time
+--       均为 REPLACE/SUM 聚合类型, 同一 (date, vendor_code) 多次写入自动合并
+--       供 WIP日报接收状态看板查询使用
+-- ------------------------------------------------------------
+CREATE TABLE wip_db.dwd_ab_wip_receive_status
+(
+    `date`           DATE         COMMENT '业务日期',
+    `vendor_code`    VARCHAR(64)  COMMENT '供应商编码',
+    `vendor_name`    VARCHAR(128) REPLACE DEFAULT '' COMMENT '供应商名称',
+    `file_count`     BIGINT       SUM DEFAULT 0 COMMENT '当日已解析文件数',
+    `update_status`  INT          REPLACE DEFAULT 0 COMMENT '更新状态',
+    `data_time`      DATETIME     REPLACE NOT NULL COMMENT '最近更新时间'
+)
+AGGREGATE KEY(`date`, `vendor_code`)
+PARTITION BY RANGE(`date`) ()
+DISTRIBUTED BY HASH(`vendor_code`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "3",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.time_zone" = "Asia/Shanghai",
+    "dynamic_partition.start" = "-30",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "3",
+    "dynamic_partition.replication_num" = "3",
+    "dynamic_partition.create_history_partition" = "true"
+);
+
 
 -- ============================================================
 -- 以下为物化视图定义
@@ -195,6 +270,32 @@ GROUP BY
     order_no,
     vendor_part_no,
     batch_no;
+
+
+-- ------------------------------------------------------------
+-- 物化视图: mv_dws_ab_wip_vendor_daily (异步物化视图, 每天自动刷新)
+-- 作用: 按 (date, vendor_code) 汇总各供应商每日在制品总量与发货量,
+--       wip_qty = die_attach + wire_bond + molding + testing + test_done
+--       供 mv_dws_ab_wip_vendor 计算近 7 天/30 天滑动均值使用
+-- ------------------------------------------------------------
+CREATE MATERIALIZED VIEW wip_db.mv_dws_ab_wip_vendor_daily
+BUILD IMMEDIATE REFRESH AUTO ON SCHEDULE EVERY 1 DAY
+DUPLICATE KEY(`date`, `vendor_code`)
+PARTITION BY (`date`)
+DISTRIBUTED BY HASH(`vendor_code`) BUCKETS 6
+PROPERTIES (
+    "replication_num" = "3"
+)
+AS SELECT
+    `date`,
+    vendor_code,
+    MAX(vendor_name)  AS vendor_name,
+    SUM(die_attach + wire_bond + molding + testing + test_done) AS wip_qty,
+    SUM(delivery_qty) AS delivery_qty
+FROM wip_db.dwd_ab_wip
+GROUP BY
+    `date`,
+    vendor_code;
 
 
 -- ============================================================
@@ -345,8 +446,11 @@ GROUP BY
 -- 视图: v_dwd_order_wip (订单与WIP关联视图)
 -- 已将 ClickHouse 特有函数替换为 Doris 兼容写法
 -- unissued_qty: 未投数量, 由 fully_issued 标记与各工序/库存/发货数量推算, 报表侧直接取用
--- 注意: 未投数量中扣减的"已发货量"取 max(w.delivery_qty, 订单已收货量 qty - open_qty),
---       即发货表与订单收货进度谁大取谁, 避免发货数据滞后导致未投数量虚高
+-- 注意1: 未投数量中扣减的"已发货量"取 max(w.delivery_qty, 订单已收货量 qty - open_qty),
+--        即发货表与订单收货进度谁大取谁, 避免发货数据滞后导致未投数量虚高
+-- 注意2: fully_issued 判定增强 — 当 fully_issued 为 NULL(无WIP数据)时,
+--        第一段(非江苏长电)在 received_rate > 0 时视为已投料,
+--        第二段(江苏长电)在 order_qty - open_qty > 0 时视为已投料
 --
 -- 【江苏长电】本视图并未排除江苏长电, 而是用 UNION ALL 分两段, 对其取数逻辑做了微调:
 --   第一段 vendor_name != '江苏长电':
@@ -384,7 +488,8 @@ SELECT
     IFNULL(w.testing, 0)                    AS testing,
     IFNULL(w.test_done, 0)                  AS test_done,
     IFNULL(w.stock_qty, 0)                  AS stock_qty,
-    case when w.fully_issued
+    case when w.fully_issued or (w.fully_issued is NULL and o.received_rate > 0)
+      --case when w.fully_issued
       then 0
       else IFNULL(o.qty, 0) - IFNULL(w.die_attach, 0) -IFNULL(w.wire_bond, 0) -IFNULL(w.molding, 0) -IFNULL(w.testing, 0) -IFNULL(w.test_done, 0)  - IFNULL(w.stock_qty, 0)  -
       case when IFNULL(w.delivery_qty, 0)>=IFNULL(o.qty, 0)-IFNULL(o.open_qty, 0)
@@ -451,7 +556,9 @@ SELECT
     IFNULL(w.testing, 0)                    AS testing,
     IFNULL(w.test_done, 0)                  AS test_done,
     IFNULL(w.stock_qty, 0)                  AS stock_qty,
-    case when w.fully_issued
+    case when w.fully_issued or (w.fully_issued is NULL and o.order_qty - o.open_qty > 0)
+      --case when IFNULL(w.fully_issued,1)=1 and o.order_qty-o.open_qty>0
+      --case when w.fully_issued
       then 0
       else IFNULL(o.order_qty, 0) - IFNULL(w.die_attach, 0) -IFNULL(w.wire_bond, 0) -IFNULL(w.molding, 0) -IFNULL(w.testing, 0) -IFNULL(w.test_done, 0)  - IFNULL(w.stock_qty, 0)  -
       case when IFNULL(w.delivery_qty, 0)>=IFNULL(o.order_qty, 0)-IFNULL(o.open_qty, 0)
@@ -510,3 +617,42 @@ LEFT JOIN (
         AND ww.batch_no = dd.batch_no
 ) w ON o.order_no = w.order_no
     AND o.vendor_part_no = w.vendor_part_no;
+
+
+-- ------------------------------------------------------------
+-- 视图: v_dws_ab_wip_vendor (供应商在制品趋势视图)
+-- 作用: 基于 mv_dws_ab_wip_vendor_daily 计算各供应商近 7 天/30 天的
+--       WIP 日均量与发货总量, 用于供应商产能趋势分析
+-- 字段:
+--   wip_avg_7d        近 7 天 WIP 日均量 (含今日)
+--   delivery_qty_7d   近 7 天发货总量
+--   wip_avg_30d       近 30 天 WIP 日均量 (含今日)
+--   delivery_qty_30d  近 30 天发货总量
+-- ------------------------------------------------------------
+CREATE VIEW wip_db.v_dws_ab_wip_vendor AS
+SELECT
+    vendor_code,
+    MAX(vendor_name) AS vendor_name,
+
+    AVG(
+        CASE
+            WHEN `date` >= CURRENT_DATE() - INTERVAL 6 DAY
+            THEN wip_qty
+        END
+    ) AS wip_avg_7d,
+
+    SUM(
+        CASE
+            WHEN `date` >= CURRENT_DATE() - INTERVAL 6 DAY
+            THEN delivery_qty
+            ELSE 0
+        END
+    ) AS delivery_qty_7d,
+
+    AVG(wip_qty) AS wip_avg_30d,
+
+    SUM(delivery_qty) AS delivery_qty_30d
+
+FROM wip_db.mv_dws_ab_wip_vendor_daily
+WHERE `date` >= CURRENT_DATE() - INTERVAL 29 DAY
+GROUP BY vendor_code;

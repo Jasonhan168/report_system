@@ -18,6 +18,7 @@ export interface VendorStatusRow {
   vendor_name: string;
   receive_time: string | null;
   status: number; // 0=未接收, 1=Loading..., 2=已接收
+  wip_avg_7d: number | null; // 近 7 日 WIP 日均量
 }
 
 export interface WipDailyStatusSummary {
@@ -60,12 +61,15 @@ export async function getWipDailyStatus(date?: string): Promise<WipDailyStatusRe
       v.vendor_code,
       v.vendor_name,
       s.data_time AS receive_time,
-      COALESCE(s.update_status, 0) AS status
+      COALESCE(s.update_status, 0) AS status,
+      ROUND(COALESCE(w.wip_avg_7d, 0)) AS wip_avg_7d
     FROM dim_vendor v
     LEFT JOIN dwd_ab_wip_receive_status s
       ON v.vendor_code = s.vendor_code
       AND s.\`date\` = ${dateCond}
-    ORDER BY status DESC, v.vendor_name
+    LEFT JOIN v_dws_ab_wip_vendor w
+      ON v.vendor_code = w.vendor_code
+    ORDER BY wip_avg_7d DESC, v.vendor_name
   `;
 
   const rows = await client.query<VendorStatusRow>(sql);
