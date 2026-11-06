@@ -13,6 +13,27 @@ import {
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { clearSessionCache } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { toast } from "sonner";
+
+function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const mutation = trpc.auth.changePassword.useMutation({
+    onSuccess: () => { clearSessionCache(true); window.location.replace("/login"); },
+    onError: err => toast.error(err.message),
+  });
+  return <Dialog open onOpenChange={v => !v && onClose()}><DialogContent>
+    <DialogHeader><DialogTitle>修改本地密码</DialogTitle><DialogDescription>修改后所有旧会话失效，请重新登录。</DialogDescription></DialogHeader>
+    <Label htmlFor="old-password">原密码</Label><Input id="old-password" type="password" autoComplete="current-password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
+    <Label htmlFor="new-password">新密码（至少6位，不超过72字节）</Label><Input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+    <Button disabled={mutation.isPending || !oldPassword || newPassword.length < 6} onClick={() => mutation.mutate({ oldPassword, newPassword })}>确认修改</Button>
+  </DialogContent></Dialog>;
+}
 
 // 根据报表 code 或路由推断图标
 function getModuleIcon(code: string, route?: string | null) {
@@ -173,14 +194,13 @@ function SidebarNav({
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   // 桌面侧边栏折叠状态，默认展开
   const [collapsed, setCollapsed] = useState(false);
-  const logout = trpc.auth.logout.useMutation({
-    onSuccess: () => { window.location.href = "/login"; },
-  });
+
   // 加载报表模块列表（用于页面标题匹配）
   const { data: reportModulesForLabel } = trpc.reportModules.list.useQuery(undefined, {
     staleTime: 30_000,
@@ -238,9 +258,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <p className="text-xs text-muted-foreground">{user?.email || (isAdmin ? "管理员" : "普通用户")}</p>
         </div>
         <DropdownMenuSeparator />
+        {user?.authType === "local" && <DropdownMenuItem onClick={() => setPasswordOpen(true)}>修改密码</DropdownMenuItem>}
         <DropdownMenuItem
           className="text-destructive focus:text-destructive cursor-pointer"
-          onClick={() => logout.mutate()}
+          onClick={() => { void logout().catch(err => toast.error(String(err))); }}
         >
           <LogOut size={14} className="mr-2" />
           退出登录
@@ -335,14 +356,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full font-medium">
               {isAdmin ? "管理员" : "普通用户"}
             </span>
+            <span className="text-xs text-muted-foreground">{user?.dataScope === "all" ? "全部分公司" : user?.hasDataAccess ? `本公司：${user.company?.name}` : "待授权"}</span>
             <span className="text-sm font-medium text-foreground">{user?.name}</span>
           </div>
         </header>
 
         {/* 页面内容：flex-1 + overflow-y-auto 保证占满剩余高度 */}
         <main className="flex-1 overflow-y-auto min-h-0">
-          {children}
+          {location.startsWith("/admin/") && !isAdmin ? <p className="p-8">需要管理员权限。</p>
+            : location.startsWith("/reports/") && !user?.hasDataAccess ? <p className="p-8">账号等待授权，请联系管理员分配分公司数据范围和报表权限。</p> : children}
         </main>
+        {passwordOpen && user?.authType === "local" && <ChangePasswordDialog onClose={() => setPasswordOpen(false)} />}
       </div>
     </div>
   );

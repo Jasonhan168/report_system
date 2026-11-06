@@ -6,6 +6,7 @@
  * 支持从汇总表下钻时传入 orderNos 精确过滤
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, sqlCastStr, sqlGroupUniqArray, parseArrayResult } from "./_dbClient";
 
@@ -111,17 +112,17 @@ function computeOverdueDays(edd: string): number {
   return Math.max(0, Math.floor((today.getTime() - eddDate.getTime()) / 86400000));
 }
 
-async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: Row[]; total: number }> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<{ rows: Row[]; total: number }> {
   const where = buildWhere(input);
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
   const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count(*) AS cnt FROM v_dwd_order WHERE ${where}`;
+  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order WHERE ${where}`;
   const dataSql = `
     SELECT ${cols}
-    FROM v_dwd_order
+    FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT ${pageSize} OFFSET ${offset}
@@ -137,7 +138,7 @@ async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: 
   return { rows, total };
 }
 
-async function queryFilter(client: ReportDbClient, input: FilterInput): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, input: FilterInput, access: ReportAccessContext): Promise<FilterOptions> {
   const d = input.date || localToday();
   const engine = client.engineType;
   const sql = `
@@ -145,7 +146,7 @@ async function queryFilter(client: ReportDbClient, input: FilterInput): Promise<
       ${sqlGroupUniqArray(engine, "production_type")} AS production_types,
       ${sqlGroupUniqArray(engine, "vendor_name")} AS vendor_names,
       ${sqlGroupUniqArray(engine, "plant")} AS plants
-    FROM v_dwd_order
+    FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
     WHERE date = '${esc(d)}' AND received_rate < 98
   `;
   const r = await client.query<{ production_types: unknown; vendor_names: unknown; plants: unknown }>(sql);
@@ -157,12 +158,12 @@ async function queryFilter(client: ReportDbClient, input: FilterInput): Promise<
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<Row[]> {
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<Row[]> {
   const where = buildWhere(input);
   const cols = SELECT_COLS(client.engineType);
   const sql = `
     SELECT ${cols}
-    FROM v_dwd_order
+    FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
     WHERE ${where}
     ORDER BY order_date DESC, order_no
     LIMIT 999999

@@ -5,15 +5,33 @@
  * AUTH_MODE=ldap   → 默认 AD域 LDAP 登录（生产环境）
  * AUTH_MODE=oauth  → Manus OAuth 登录（云端部署）
  *
- * 登录策略（不论 AUTH_MODE）：
- *   1. 先查用户表，若用户存在且有 passwordHash → 本地验证
- *   2. 用户存在但无 passwordHash，或用户不存在 → 走 LDAP 验证
- *   3. AUTH_MODE=local 且 LDAP 未配置时，若用户无密码则提示联系管理员
+ * local / ldap / hybrid 共用表单，按 users.authType 严格选择认证方式。
+ * AD 不降级为本地验证；未登记账号仅在自动注册开启时验证 AD 并注册零权限账号。
  */
 import bcrypt from "bcryptjs";
 import { Client as LdapClient } from "ldapts";
-import { ENV } from "./_core/env";
 import * as db from "./db";
+import { registerAdAccount, requireDb } from "./accounts";
+
+export function normalizeUsername(username: string, domain?: string, netbios?: string): string {
+  const value = username.trim().toLowerCase();
+  let account = value;
+  if (value.includes("\\")) {
+    const parts = value.split("\\");
+    if (parts.length !== 2 || !domain || parts[0] !== (netbios || domain.split(".")[0]).toLowerCase()) throw new Error("不支持的AD域");
+    account = parts[1];
+  } else if (value.includes("@")) {
+    const parts = value.split("@");
+    if (parts.length !== 2 || !domain || parts[1] !== domain.toLowerCase()) throw new Error("不支持的AD域");
+    account = parts[0];
+  }
+  if (!/^[a-z0-9_.-]{1,64}$/.test(account)) throw new Error("用户名格式不正确");
+  return account;
+}
+
+export function escapeLdapFilter(value: string) {
+  return value.replace(/[\\*()\u0000]/g, c => `\\${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+}
 
 // ─── 本地账号密码认证 ──────────────────────────────────────────────────────────
 
@@ -35,8 +53,9 @@ export async function authenticateLocal(
   username: string,
   password: string
 ): Promise<Awaited<ReturnType<typeof db.getUserByOpenId>>> {
-  const user = await db.getUserByOpenId(username);
+  const user = await db.getUserByOpenId(normalizeUsername(username));
 
+  if (user && user.authType !== "local") throw new Error("该账号不支持本地密码认证");
   if (!user) {
     throw new Error("用户名或密码错误");
   }
@@ -63,6 +82,7 @@ export interface LdapConfig {
   baseDn: string;
   bindUser?: string;
   bindPassword?: string;
+  netbios?: string;
 }
 
 export async function getLdapConfig(): Promise<LdapConfig | null> {
@@ -78,7 +98,7 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
 
     if (!url || !domain || !baseDn) return null;
 
-    return { url, domain, baseDn, bindUser, bindPassword };
+    return { url, domain, baseDn, bindUser, bindPassword, netbios: get("ad_netbios_domain") };
   } catch {
     return null;
   }
@@ -93,22 +113,22 @@ export async function authenticateLdap(
     throw new Error("AD域配置不完整，请在系统配置中填写 AD服务器地址、域名和Base DN");
   }
 
-  let bindDn: string;
-  if (username.includes("@")) {
-    bindDn = username;
-  } else if (username.includes("\\")) {
-    bindDn = username;
-  } else {
-    const domainShort = config.domain.split(".")[0].toUpperCase();
-    bindDn = `${domainShort}\\${username}`;
-  }
+  const account = normalizeUsername(username, config.domain, config.netbios);
+  if (!password) throw new Error("密码不能为空");
+  // 按已配置的 LDAP / LDAPS 协议连接，不因生产模式强制切换。
+  const bindDn = `${account}@${config.domain}`;
 
   const client = new LdapClient({ url: config.url, timeout: 5000, connectTimeout: 5000 });
 
   try {
     await client.bind(bindDn, password);
 
-    let displayName = username;
+    const identity = await client.search(config.baseDn, {
+      scope: "sub", filter: `(sAMAccountName=${escapeLdapFilter(account)})`,
+      attributes: ["sAMAccountName"],
+    });
+    if (identity.searchEntries.length !== 1 || String(identity.searchEntries[0].sAMAccountName).toLowerCase() !== account) throw new Error("AD账号身份无法确认");
+    let displayName = account;
     let email: string | null = null;
     let department: string | null = null;
 
@@ -119,7 +139,7 @@ export async function authenticateLdap(
 
       const { searchEntries } = await client.search(config.baseDn, {
         scope: "sub",
-        filter: `(sAMAccountName=${samAccountName})`,
+        filter: `(sAMAccountName=${escapeLdapFilter(samAccountName)})`,
         attributes: ["displayName", "mail", "department", "cn"],
       });
 
@@ -133,13 +153,11 @@ export async function authenticateLdap(
       // 搜索失败不影响登录
     }
 
-    const openId = username.includes("\\")
-      ? username.split("\\")[1].toLowerCase()
-      : username.split("@")[0].toLowerCase();
+    const openId = account;
 
     return { openId, name: displayName, email, department };
   } finally {
-    await client.unbind();
+    await client.unbind().catch(() => {});
   }
 }
 
@@ -151,28 +169,32 @@ export type AuthResult = {
   email: string | null;
   department: string | null;
   loginMethod: string;
+  sessionVersion: number;
 };
 
 /**
  * 统一登录验证
  *
- * 策略（按顺序）：
- *   1. 查用户表，若用户存在且有 passwordHash → 本地密码验证
- *   2. 否则尝试 LDAP 验证（需系统配置中已填写 AD 参数）
- *   3. LDAP 未配置且无本地密码 → 提示联系管理员
- *
- * 这样管理员账号（有 passwordHash）始终可以用本地密码登录，
- * 普通域账号（无 passwordHash）走 LDAP，互不干扰。
+ * 已有用户严格按 authType 验证；本地失败不尝试 AD，AD 失败不回退本地。
+ * 新 AD 账号需开启自动注册，并由注册函数固定为零业务权限。
  */
 export async function authenticate(
   username: string,
   password: string
 ): Promise<AuthResult> {
+  await requireDb();
+  const qualified = username.includes("\\") || username.includes("@");
+  const config = qualified ? await getLdapConfig() : null;
+  const account = normalizeUsername(username, config?.domain, config?.netbios);
   // 先查用户表
-  const user = await db.getUserByOpenId(username);
+  let user = await db.getUserByOpenId(account);
+  if (user && !user.isActive) throw new Error("账号已被禁用，请联系管理员");
+  if (user?.authType === "oauth") throw new Error("该账号仅支持OAuth认证");
+  if (qualified && user?.authType === "local") throw new Error("本地账号请使用短用户名登录");
 
   // 情况1：用户存在且有本地密码 → 本地验证
-  if (user && user.passwordHash) {
+  if (user?.authType === "local") {
+    if (!user.passwordHash) throw new Error("该账号未设置密码，请联系管理员");
     if (!user.isActive) {
       throw new Error("账号已被禁用，请联系管理员");
     }
@@ -186,20 +208,29 @@ export async function authenticate(
       email: user.email || null,
       department: user.department || null,
       loginMethod: "local",
+      sessionVersion: user.sessionVersion,
     };
   }
 
   // 情况2：用户存在但无本地密码，或用户不存在 → 尝试 LDAP
+  if (!user) {
+    const autoRegister = await db.getSystemConfigByKey("ad_auto_register");
+    if (autoRegister?.value !== "true") throw new Error("账号未登记，请联系管理员");
+  } else if (user.authType !== "ldap") {
+    throw new Error("账号认证方式未配置");
+  }
   const ldapConfig = await getLdapConfig();
   if (ldapConfig) {
-    const result = await authenticateLdap(username, password);
-    return { ...result, loginMethod: "ldap" };
+    let result;
+    try { result = await authenticateLdap(account, password); }
+    catch (error: any) {
+      if (error?.code === 49 || error?.name === "InvalidCredentialsError") throw new Error("用户名或密码错误");
+      throw new Error("AD认证失败，请检查域服务及安全连接配置");
+    }
+    if (result.openId !== account) throw new Error("AD身份与登录账号不一致");
+    if (!user) user = await registerAdAccount(result);
+    return { ...result, openId: user.openId, loginMethod: "ldap", sessionVersion: user.sessionVersion };
   }
 
-  // 情况3：无 LDAP 配置，用户也无本地密码
-  if (user && !user.passwordHash) {
-    throw new Error("该账号未设置密码，请联系管理员");
-  }
-
-  throw new Error("用户名或密码错误");
+  throw new Error("AD域配置不完整，请联系管理员配置认证服务");
 }

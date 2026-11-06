@@ -16,6 +16,8 @@ export default function Home() {
   const now = new Date();
   const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日${WEEKDAYS[now.getDay()]}`;
 
+  if (!user?.hasDataAccess) return <div className="p-8 text-center space-y-2"><h1 className="text-lg font-semibold">等待授权</h1><p className="text-sm text-muted-foreground">账号已注册，等待管理员分配分公司数据范围和报表权限。</p></div>;
+
   return (
     <div className="h-full flex flex-col p-6 gap-6">
       {/* 欢迎横幅 */}
@@ -39,7 +41,7 @@ export default function Home() {
       */}
 
       {/* WIP 日报接收状态看板 */}
-      <WipDailyStatusPanel />
+      {user.dataScope === "all" && <WipDailyStatusPanel />}
 
       {/* 报表模块分组：flex-1 占满剩余空间 */}
       <div className="flex-1 min-h-0 overflow-y-auto">

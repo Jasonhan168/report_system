@@ -20,7 +20,7 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
     name: "Sample User",
     loginMethod: "local",
     role: "user",
-    department: null,
+    department: null, companyId: null, dataScope: "all", authType: "local", sessionVersion: 1,
     isActive: true,
     passwordHash: null,
     createdAt: new Date(),

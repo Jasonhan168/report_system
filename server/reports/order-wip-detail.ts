@@ -9,6 +9,7 @@
  *   - 支持按委外厂商、封装形式、标签品名、供应商料号、工程/量产、分公司过滤
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, type EngineType, sqlCastStr, sqlCastInt64, sqlGroupUniqArrayIf, parseArrayResult } from "./_dbClient";
 
@@ -110,7 +111,7 @@ function computeOverdueDays(edd: string | null | undefined): number {
 }
 
 // ─── 基础 SQL ────────────────────────────────────────────────────────────────
-function getBaseSql(engine: EngineType): string {
+function getBaseSql(engine: EngineType, access: ReportAccessContext): string {
   return `
 SELECT
     ifNull(order_no, '')         AS order_no,
@@ -136,9 +137,9 @@ SELECT
     ifNull(test_done, 0)         AS test_done,
     ifNull(plant, '')            AS plant,
     ${sqlCastStr(engine, "ifNull(update_time, '')")} AS update_time
-FROM v_dwd_order_wip
+FROM ${scopedSource("v_dwd_order_wip", access)} AS v_dwd_order_wip
 WHERE package_type != ''
-  AND vendor_name IN (SELECT DISTINCT vendor_name FROM v_dws_ab_wip WHERE vendor_name != '')
+  AND vendor_name IN (SELECT DISTINCT vendor_name FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip WHERE vendor_name != '')
 `;
 }
 
@@ -207,10 +208,10 @@ function toRow(r: Record<string, unknown>): Row {
 //   1) query：数据分页 + 统计(count/sum)拆分为两条独立 SQL 并行执行，
 //      规避 ClickHouse 18.16.1 UNION ALL 中 count() 在 WHERE 生效时返回 0 的兼容问题。
 //   2) filterOptions：用 groupUniqArrayIf 单次扫描即可一次性聚合 6 个字段的去重列表。
-async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const engine = client.engineType;
-  const BASE_SQL = getBaseSql(engine);
+  const BASE_SQL = getBaseSql(engine, access);
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
 
@@ -287,9 +288,9 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const engine = client.engineType;
-  const BASE_SQL = getBaseSql(engine);
+  const BASE_SQL = getBaseSql(engine, access);
 
   const sql = `
 SELECT
@@ -315,8 +316,8 @@ FROM (${BASE_SQL}) AS t`;
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<ExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }
 
@@ -365,7 +366,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
   filterOptionsInputSchema: undefined,
 
   query:         queryData,
-  filterOptions: (client) => queryFilter(client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery:   queryExport,
 
   emptyQueryResult: {

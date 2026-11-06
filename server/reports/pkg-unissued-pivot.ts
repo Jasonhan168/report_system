@@ -7,6 +7,7 @@
  * 行列均带合计
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin, ExcelConfig } from "./_types";
 import { type ReportDbClient } from "./_dbClient";
 
@@ -68,13 +69,13 @@ export interface ExportReturn {
 
 // ─── 核心 SQL ────────────────────────────────────────────────────────────────
 
-const BASE_SQL = `
+const BASE_SQL = (access: ReportAccessContext) => `
 SELECT
   ifNull(package_type, '') AS package_type,
   ifNull(vendor_name, '')  AS vendor_name,
   sum(ifNull(unissued_qty, 0)) AS unissued_qty
-FROM v_dwd_order_wip
-WHERE package_type != '' and vendor_name in (select distinct vendor_name from v_dws_ab_wip where vendor_name != '')
+FROM ${scopedSource("v_dwd_order_wip", access)} AS v_dwd_order_wip
+WHERE package_type != '' and vendor_name in (select distinct vendor_name from ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip where vendor_name != '')
 `;
 
 function buildWhere(input: Input): string {
@@ -133,11 +134,11 @@ function buildPivot(flatRows: FlatRow[]): {
 
 // ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
 
-async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<QueryReturn> {
   const { page = 1, pageSize = 50 } = input;
   const where = buildWhere(input);
 
-  const sql = `${BASE_SQL} ${where} GROUP BY package_type, vendor_name ORDER BY package_type, vendor_name`;
+  const sql = `${BASE_SQL(access)} ${where} GROUP BY package_type, vendor_name ORDER BY package_type, vendor_name`;
 
   const raw = await client.query<Record<string, unknown>>(sql);
 
@@ -166,16 +167,16 @@ async function queryData(client: ReportDbClient, input: Input): Promise<QueryRet
   return { vendors, rows, totalRow, colTotals, grandTotal, total };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const ptSql = `
     SELECT DISTINCT package_type
-    FROM v_dwd_order_wip
+    FROM ${scopedSource("v_dwd_order_wip", access)} AS v_dwd_order_wip
     WHERE package_type != ''
     ORDER BY package_type
   `;
   const prodSql = `
     SELECT DISTINCT production_type
-    FROM v_dwd_order_wip
+    FROM ${scopedSource("v_dwd_order_wip", access)} AS v_dwd_order_wip
     WHERE production_type != ''
     ORDER BY production_type
   `;
@@ -189,8 +190,8 @@ async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<ExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return {
     vendors: r.vendors,
     rows: r.rows,
@@ -275,7 +276,7 @@ const plugin: ReportPlugin<
   filterOptionsInputSchema: undefined,
 
   query: queryData,
-  filterOptions: (_client) => queryFilter(_client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery: queryExport,
 
   emptyQueryResult: {

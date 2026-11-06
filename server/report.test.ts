@@ -84,7 +84,7 @@ function createAdminCtx(): TrpcContext {
     user: {
       id: 1, openId: "admin-001", name: "管理员", email: "admin@example.com",
       loginMethod: "local", role: "admin", isActive: true,
-      department: null, passwordHash: null,
+      department: null, companyId: null, dataScope: "all", authType: "local", sessionVersion: 1, passwordHash: null,
       createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     },
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
@@ -99,7 +99,7 @@ describe("auth.logout", () => {
       user: {
         id: 1, openId: "test-user", name: "Test", email: null,
         loginMethod: "local", role: "user", isActive: true,
-        department: null, passwordHash: null,
+        department: null, companyId: null, dataScope: "all", authType: "local", sessionVersion: 1, passwordHash: null,
         createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
       },
       req: { protocol: "https", headers: {} } as TrpcContext["req"],

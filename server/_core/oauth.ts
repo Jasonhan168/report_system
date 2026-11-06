@@ -1,8 +1,9 @@
 import { COOKIE_NAME, SESSION_IDLE_TIMEOUT_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
-import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { ENV } from "./env";
+import { registerAdAccount } from "../accounts";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -11,6 +12,7 @@ function getQueryParam(req: Request, key: string): string | undefined {
 
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
+    if (ENV.authMode !== "oauth") { res.status(404).end(); return; }
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 
@@ -28,16 +30,15 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
-      await db.upsertUser({
+      const user = await registerAdAccount({
         openId: userInfo.openId,
         name: userInfo.name || null,
         email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-        lastSignedIn: new Date(),
-      });
+      }, "oauth");
 
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
+        sessionVersion: user.sessionVersion,
         expiresInMs: SESSION_IDLE_TIMEOUT_MS,
       });
 

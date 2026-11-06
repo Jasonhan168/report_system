@@ -29,6 +29,13 @@
       "when": 1777000000000,
       "tag": "0003_operation_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792914257415,
+      "tag": "0004_company_auth_scope",
+      "breakpoints": true
     }
   ]
 }

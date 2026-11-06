@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef } from "react";
 import { useAutoTitles } from "@/hooks/useAutoTitles";
@@ -280,7 +281,7 @@ export default function EngPkgWip() {
         ...(queryParams.label       ? { label:       queryParams.label }       : {}),
         ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
       });
-      const resp = await fetch(`/api/export/eng-pkg-wip?${params.toString()}`);
+      const resp = await sessionFetch(`/api/export/eng-pkg-wip?${params.toString()}`);
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "导出失败" }));
         toast.error((err as { error?: string }).error || "导出失败，请重试");

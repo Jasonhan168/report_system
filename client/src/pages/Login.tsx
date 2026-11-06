@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { clearSessionCache } from "@/lib/session";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,18 +8,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BarChart3, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 export default function Login() {
-  const [, navigate] = useLocation();
+  // 登录成功后重新挂载应用，避免沿用上一账号的组件状态。
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const utils = trpc.useUtils();
-
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: async () => {
-      await utils.auth.me.invalidate();
-      navigate("/");
+    onSuccess: () => {
+      clearSessionCache(true);
+      window.location.replace("/");
     },
     onError: (err) => {
       setErrorMsg(err.message || "登录失败，请检查用户名和密码");

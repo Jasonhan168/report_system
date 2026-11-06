@@ -9,6 +9,13 @@ import {
   json,
 } from "drizzle-orm/mysql-core";
 
+export const companies = mysqlTable("companies", {
+  id: int("id").autoincrement().primaryKey(),
+  plant: varchar("plant", { length: 128 }).notNull().unique(),
+  name: varchar("name", { length: 128 }).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+});
+
 // ─── 用户表 ────────────────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -23,6 +30,10 @@ export const users = mysqlTable("users", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   passwordHash: text("passwordHash"),
+  companyId: int("companyId").references(() => companies.id),
+  dataScope: mysqlEnum("dataScope", ["none", "own", "all"]).default("none").notNull(),
+  authType: mysqlEnum("authType", ["local", "ldap", "oauth"]).default("ldap").notNull(),
+  sessionVersion: int("sessionVersion").default(1).notNull(),
 });
 
 export type User = typeof users.$inferSelect;

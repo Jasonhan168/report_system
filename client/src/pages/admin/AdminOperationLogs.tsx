@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, { text: string; color: string }> = {
   view:          { text: "查看",       color: "bg-blue-100 text-blue-700 border-blue-200" },
   export:        { text: "导出",       color: "bg-amber-100 text-amber-700 border-amber-200" },
   drill_down:    { text: "下钻",       color: "bg-purple-100 text-purple-700 border-purple-200" },
+  security_change: { text: "安全配置变更", color: "bg-orange-100 text-orange-700 border-orange-200" },
 };
 
 function formatTime(t: Date | string) {
@@ -151,6 +152,7 @@ export default function AdminOperationLogs() {
                 <SelectItem value="view">查看报表</SelectItem>
                 <SelectItem value="export">导出报表</SelectItem>
                 <SelectItem value="drill_down">下钻</SelectItem>
+                <SelectItem value="security_change">安全配置变更</SelectItem>
               </SelectContent>
             </Select>
           </div>

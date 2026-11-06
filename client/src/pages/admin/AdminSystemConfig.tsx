@@ -3,13 +3,17 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Settings, RefreshCw, Save } from "lucide-react";
 
 export default function AdminSystemConfig() {
   const { data: configs, isLoading, refetch } = trpc.systemConfigs.list.useQuery();
-  const batchUpsert = trpc.systemConfigs.batchUpsert.useMutation({ onSuccess: () => { toast.success("配置已保存"); refetch(); } });
+  const batchUpsert = trpc.systemConfigs.batchUpsert.useMutation({
+    onSuccess: () => { toast.success("配置已保存"); refetch(); },
+    onError: error => toast.error(error.message || "配置保存失败"),
+  });
 
   const [form, setForm] = useState<Record<string, string>>({});
 
@@ -25,7 +29,9 @@ export default function AdminSystemConfig() {
     {
       title: "AD域认证配置",
       items: [
-        { key: "ad_server_url", label: "AD服务器地址", placeholder: "ldap://192.168.1.1:389", description: "Windows域控制器LDAP地址" },
+        { key: "ad_auto_register", label: "允许 AD 自动注册", placeholder: "", description: "默认关闭；开启后新账号仅注册，仍需管理员分配数据范围和报表权限" },
+        { key: "ad_server_url", label: "AD服务器地址", placeholder: "ldap://dc.company.com:389 或 ldaps://dc.company.com:636", description: "兼容现有 LDAP；LDAP 不加密认证传输。可选 LDAPS，启用时需受信任且匹配域名的证书" },
+        { key: "ad_netbios_domain", label: "NetBIOS 域名", placeholder: "COMPANY", description: "用于 DOMAIN\\user；留空使用域名首段" },
         { key: "ad_domain", label: "域名", placeholder: "company.com", description: "Windows域名" },
         { key: "ad_base_dn", label: "Base DN", placeholder: "DC=company,DC=com", description: "LDAP搜索基础DN" },
       ],
@@ -82,12 +88,12 @@ export default function AdminSystemConfig() {
                       <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                     </div>
                     <div className="col-span-2">
-                      <Input
+                      {item.key === "ad_auto_register" ? <Switch aria-label={item.label} checked={form[item.key] === "true"} onCheckedChange={checked => setForm(f => ({ ...f, [item.key]: String(checked) }))} /> : <Input
                         className="h-9 text-sm"
                         placeholder={item.placeholder}
                         value={form[item.key] || ""}
                         onChange={(e) => setForm((f) => ({ ...f, [item.key]: e.target.value }))}
-                      />
+                      />}
                     </div>
                   </div>
                 ))}

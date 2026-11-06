@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
@@ -86,7 +87,7 @@ export default function PkgUnissuedPivot() {
         ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
         ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
       });
-      const resp = await fetch(`/api/export/pkg-unissued-pivot?${params.toString()}`);
+      const resp = await sessionFetch(`/api/export/pkg-unissued-pivot?${params.toString()}`);
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "导出失败" }));
         toast.error(err.error || "导出失败，请重试");

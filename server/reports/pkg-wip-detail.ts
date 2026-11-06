@@ -4,6 +4,7 @@
  * 数据来源：v_dwd_ab_wip（DWD 明细，按日期筛选）
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, sqlCastStr, sqlGroupUniqArray, parseArrayResult } from "./_dbClient";
 
@@ -65,18 +66,18 @@ const SELECT_COLS = (engine: ReportDbClient["engineType"]) => `
   ${TOTAL_WIP_EXPR} AS total_wip
 `;
 
-async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: Row[]; total: number }> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<{ rows: Row[]; total: number }> {
   const where = buildWhere(input);
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
   const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count(*) AS cnt FROM v_dwd_ab_wip WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0`;
+  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0`;
   const dataSql = `
     SELECT ${cols}
-    FROM v_dwd_ab_wip
-    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0
+    FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
+    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
     ORDER BY date DESC, vendor_name, order_no
     LIMIT ${pageSize} OFFSET ${offset}
   `;
@@ -99,26 +100,26 @@ async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: 
   return { rows, total };
 }
 
-async function queryFilter(client: ReportDbClient, input: FilterInput): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, input: FilterInput, access: ReportAccessContext): Promise<FilterOptions> {
   const d = input.date || localToday();
   const engine = client.engineType;
   const sql = `
     SELECT ${sqlGroupUniqArray(engine, "vendor_name")} AS vendor_names
-    FROM v_dwd_ab_wip
-    WHERE date = '${esc(d)}' AND ${TOTAL_WIP_EXPR} > 0
+    FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
+    WHERE date = '${esc(d)}' AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
   `;
   const r = await client.query<{ vendor_names: unknown }>(sql);
   const row = r[0] ?? { vendor_names: [] };
   return { vendorNames: parseArrayResult(row.vendor_names).filter(Boolean).sort() };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<Row[]> {
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<Row[]> {
   const where = buildWhere(input);
   const cols = SELECT_COLS(client.engineType);
   const sql = `
     SELECT ${cols}
-    FROM v_dwd_ab_wip
-    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0
+    FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
+    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
     ORDER BY date DESC, vendor_name, order_no
     LIMIT 999999
   `;

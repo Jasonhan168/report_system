@@ -6,7 +6,8 @@
  *   - Express 导出接口（/api/export/<code>）
  *   - report_modules 表默认记录
  */
-import type { ZodTypeAny } from "zod";
+import type { ZodType } from "zod";
+import type { ReportAccessContext } from "./_scope";
 import type { ReportDbClient } from "./_dbClient";
 
 /** 报表模块元数据 —— 写入 report_modules 表 */
@@ -80,18 +81,18 @@ export interface ReportPlugin<
   meta: ReportMeta;
 
   /** Zod schema —— query 过程 */
-  inputSchema: ZodTypeAny;
+  inputSchema: ZodType<Input, Input>;
   /** Zod schema —— exportData 过程 */
-  exportInputSchema: ZodTypeAny;
+  exportInputSchema: ZodType<Input, Input>;
   /** Zod schema —— filterOptions 过程（可选，部分报表无 filterOptions 或无参数） */
-  filterOptionsInputSchema?: ZodTypeAny;
+  filterOptionsInputSchema?: ZodType<FilterInput, FilterInput>;
 
   /** 分页查询（ClickHouse / Doris） */
-  query: (client: ReportDbClient, input: Input) => Promise<QueryReturn>;
+  query: (client: ReportDbClient, input: Input, access: ReportAccessContext) => Promise<QueryReturn>;
   /** 筛选项查询（ClickHouse / Doris） */
-  filterOptions?: (client: ReportDbClient, input: FilterInput) => Promise<FilterOptions>;
+  filterOptions?: (client: ReportDbClient, input: FilterInput, access: ReportAccessContext) => Promise<FilterOptions>;
   /** 导出查询（ClickHouse / Doris） */
-  exportQuery: (client: ReportDbClient, input: Input) => Promise<ExportReturn>;
+  exportQuery: (client: ReportDbClient, input: Input, access: ReportAccessContext) => Promise<ExportReturn>;
 
   /** 无数据源时的兜底 query 返回值 */
   emptyQueryResult: QueryReturn;

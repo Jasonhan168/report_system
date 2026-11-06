@@ -10,7 +10,7 @@ export const ENV = {
   // AUTH_MODE: "local" = 本地账号密码登录（测试环境）
   //            "ldap"  = AD域LDAP登录（生产环境）
   //            "oauth" = Manus OAuth登录（云端部署）
-  authMode: (process.env.AUTH_MODE ?? "local") as "local" | "ldap" | "oauth",
+  authMode: (process.env.AUTH_MODE ?? "local") as "local" | "ldap" | "hybrid" | "oauth",
   // 启动时是否同步报表插件元数据（name/category/description/route/sortOrder）到数据库。
   // true  = 每次启动覆盖（默认，开发/测试环境保持元数据最新）
   // false = 仅插入新模块，不覆盖已有记录（生产环境避免覆盖管理员后台修改）

@@ -5,11 +5,11 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
-  getAllUsers, updateUserRole, updateUserActive, getUserByOpenId, upsertUser,
+  getAllUsers, getUserByOpenId, upsertUser,
   getAllDatasources, getDatasourceById, createDatasource, updateDatasource, deleteDatasource,
   getAllReportModules, getReportModuleByCode, createReportModule, updateReportModule,
-  getPermissionsByUserId, getPermissionsByReportId, upsertReportPermission,
-  getAllPermissionsWithUsers, getAllSystemConfigs, upsertSystemConfig,
+  getPermissionsByUserId, getPermissionsByReportId,
+  getAllPermissionsWithUsers, getAllSystemConfigs,
   initDefaultData, listOperationLogs,
 } from "./db";
 import { testClickHouseConnection, invalidateClickHouseClient, testDorisConnection, invalidateDorisClient } from "./datasource";
@@ -31,6 +31,8 @@ import { logOperation } from "./_core/operationLog";
 import { sdk } from "./_core/sdk";
 import { ENV } from "./_core/env";
 import { getWipDailyStatus } from "./wipStatus";
+import { accountInput, localPasswordInput, saveAccount, safeUser, listCompanies, saveCompany, changeAccountPassword, setAccountActive, getCompany, saveReportPermission, saveSystemConfigs } from "./accounts";
+import { hasDataScope, requireAllScope, authorizeReport, constrainPlant } from "./reportAccess";
 
 // ─── 管理员鉴权中间件 ──────────────────────────────────────────────────────────
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -50,7 +52,10 @@ export const appRouter = router({
       if (opts.ctx.user) {
         await initDefaultData().catch(() => {});
       }
-      return opts.ctx.user;
+      const user = opts.ctx.user;
+      if (!user) return null;
+      const company = user.companyId ? await getCompany(user.companyId) : null;
+      return { ...safeUser(user), company: company ? { plant: company.plant, name: company.name } : null, hasDataAccess: await hasDataScope(user) };
     }),
 
     // 获取当前认证模式（前端用于决定是否显示本地登录表单）
@@ -88,6 +93,10 @@ export const appRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: err.message || "登录失败" });
         }
 
+        const current = await getUserByOpenId(authResult.openId);
+        if (!current?.isActive || current.sessionVersion !== authResult.sessionVersion || current.authType !== authResult.loginMethod) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "账号配置已变更，请重新登录" });
+        }
         // 同步用户到数据库
         await upsertUser({
           openId: authResult.openId,
@@ -104,6 +113,7 @@ export const appRouter = router({
         // 创建 JWT session
         const sessionToken = await sdk.createSessionToken(authResult.openId, {
           name: authResult.name,
+          sessionVersion: authResult.sessionVersion,
           expiresInMs: SESSION_IDLE_TIMEOUT_MS,
         });
 
@@ -122,7 +132,7 @@ export const appRouter = router({
           durationMs: Date.now() - start,
         }).catch(() => {});
 
-        return { success: true, user };
+        return { success: true, user: user ? safeUser(user) : null };
       }),
 
     // 退出登录
@@ -144,11 +154,11 @@ export const appRouter = router({
     changePassword: protectedProcedure
       .input(z.object({
         oldPassword: z.string().min(1),
-        newPassword: z.string().min(6, "新密码至少6位"),
+        newPassword: localPasswordInput,
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ENV.authMode !== "local") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "当前模式不支持修改密码" });
+        if (ctx.user.authType !== "local") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "仅本地账号支持修改密码" });
         }
         const user = ctx.user;
         if (!user.passwordHash) {
@@ -156,27 +166,33 @@ export const appRouter = router({
         }
         const valid = await verifyPassword(input.oldPassword, user.passwordHash);
         if (!valid) {
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "原密码错误" });
+          throw new TRPCError({ code: "BAD_REQUEST", message: "原密码错误" });
         }
         const newHash = await hashPassword(input.newPassword);
-        await upsertUser({ openId: user.openId, passwordHash: newHash });
+        await changeAccountPassword(user.id, newHash, ctx.user, user.sessionVersion);
+        ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
         return { success: true };
       }),
   }),
 
   // ─── 用户管理 ───────────────────────────────────────────────────────────────
   users: router({
-    list: adminProcedure.query(async () => getAllUsers()),
+    list: adminProcedure.query(async () => (await getAllUsers()).map(safeUser)),
+    save: adminProcedure.input(accountInput).mutation(async ({ input, ctx }) =>
+      saveAccount(input, ctx.user, input.password ? await hashPassword(input.password) : undefined)),
     setRole: adminProcedure
       .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
-      .mutation(async ({ input }) => {
-        await updateUserRole(input.userId, input.role);
-        return { success: true };
+      .mutation(async ({ input, ctx }) => {
+        const user = (await getAllUsers()).find(u => u.id === input.userId);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+        return saveAccount({ userId: user.id, username: user.openId, displayName: user.name || user.openId,
+          email: user.email || "", department: user.department || "", authType: user.authType,
+          companyId: user.companyId, dataScope: input.role === "admin" ? "all" : "none", role: input.role }, ctx.user);
       }),
     setActive: adminProcedure
       .input(z.object({ userId: z.number(), isActive: z.boolean() }))
-      .mutation(async ({ input }) => {
-        await updateUserActive(input.userId, input.isActive);
+      .mutation(async ({ input, ctx }) => {
+        await setAccountActive(input.userId, input.isActive, ctx.user);
         return { success: true };
       }),
     // 管理员创建本地用户（仅 local 模式）
@@ -184,51 +200,31 @@ export const appRouter = router({
       .input(z.object({
         username: z.string().min(1, "用户名不能为空").regex(/^[a-zA-Z0-9_.-]+$/, "用户名只能包含字母、数字、下划线、点和连字符"),
         displayName: z.string().min(1, "显示名不能为空"),
-        password: z.string().min(6, "密码至少6位"),
+        password: localPasswordInput,
         email: z.string().email("邮箱格式不正确").optional().or(z.literal("")),
         role: z.enum(["user", "admin"]).default("user"),
         department: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
-        if (ENV.authMode !== "local") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "仅本地模式支持创建用户" });
-        }
-        const existing = await getUserByOpenId(input.username);
-        if (existing) {
-          throw new TRPCError({ code: "CONFLICT", message: "用户名已存在" });
-        }
-        const passwordHash = await hashPassword(input.password);
-        await upsertUser({
-          openId: input.username,
-          name: input.displayName,
-          email: input.email || null,
-          department: input.department || null,
-          loginMethod: "local",
-          role: input.role,
-          passwordHash,
-          lastSignedIn: new Date(),
-        });
-        return { success: true };
-      }),
+      .mutation(async ({ input, ctx }) => saveAccount({ ...input, username: input.username.toLowerCase(), authType: "local", companyId: null,
+        dataScope: input.role === "admin" ? "all" : "none" }, ctx.user, await hashPassword(input.password))),
     // 管理员重置用户密码（仅 local 模式）
     resetPassword: adminProcedure
       .input(z.object({
         userId: z.number(),
-        newPassword: z.string().min(6, "密码至少6位"),
+        newPassword: localPasswordInput,
       }))
-      .mutation(async ({ input }) => {
-        if (ENV.authMode !== "local") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "仅本地模式支持重置密码" });
-        }
-        const allUsers = await getAllUsers();
-        const user = allUsers.find((u) => u.id === input.userId);
-        if (!user) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
-        }
-        const passwordHash = await hashPassword(input.newPassword);
-        await upsertUser({ openId: user.openId, passwordHash });
+      .mutation(async ({ input, ctx }) => {
+        await changeAccountPassword(input.userId, await hashPassword(input.newPassword), ctx.user);
         return { success: true };
       }),
+  }),
+
+  companies: router({
+    list: adminProcedure.query(() => listCompanies()),
+    save: adminProcedure.input(z.object({
+      id: z.number().int().positive().optional(), plant: z.string().trim().min(1).max(128),
+      name: z.string().trim().min(1).max(128), isActive: z.boolean(),
+    })).mutation(({ input, ctx }) => saveCompany(input, ctx.user)),
   }),
 
   // ─── 数据源管理 ─────────────────────────────────────────────────────────────
@@ -311,7 +307,8 @@ export const appRouter = router({
   // ─── 报表模块 ───────────────────────────────────────────────────────────────
   reportModules: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const modules = await getAllReportModules();
+      if (!await hasDataScope(ctx.user)) return [];
+      const modules = (await getAllReportModules()).filter(m => m.isActive);
       if (ctx.user.role === "admin") return modules;
       const permissions = await getPermissionsByUserId(ctx.user.id);
       const allowedIds = new Set(permissions.filter((p) => p.canView).map((p) => p.reportModuleId));
@@ -320,7 +317,8 @@ export const appRouter = router({
     listAll: adminProcedure.query(async () => getAllReportModules()),
     getByCode: protectedProcedure
       .input(z.object({ code: z.string().min(1) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        await authorizeReport(ctx.user, input.code, "view");
         const mod = await getReportModuleByCode(input.code);
         if (!mod) throw new Error("报表模块不存在");
         return mod;
@@ -373,11 +371,12 @@ export const appRouter = router({
         canView: z.boolean(),
         canExport: z.boolean(),
       }))
-      .mutation(async ({ input }) => {
-        await upsertReportPermission(input);
+      .mutation(async ({ input, ctx }) => {
+        await saveReportPermission(input, ctx.user);
         return { success: true };
       }),
     myPermissions: protectedProcedure.query(async ({ ctx }) => {
+      if (!await hasDataScope(ctx.user)) return [];
       if (ctx.user.role === "admin") {
         const modules = await getAllReportModules();
         return modules.map((m) => ({ reportModuleId: m.id, canView: true, canExport: true }));
@@ -396,8 +395,8 @@ export const appRouter = router({
         description: z.string().optional(),
         category: z.string().optional(),
       }))
-      .mutation(async ({ input }) => {
-        await upsertSystemConfig(input);
+      .mutation(async ({ input, ctx }) => {
+        await saveSystemConfigs([input], ctx.user);
         return { success: true };
       }),
     batchUpsert: adminProcedure
@@ -407,8 +406,8 @@ export const appRouter = router({
         description: z.string().optional(),
         category: z.string().optional(),
       })))
-      .mutation(async ({ input }) => {
-        for (const config of input) await upsertSystemConfig(config);
+      .mutation(async ({ input, ctx }) => {
+        await saveSystemConfigs(input, ctx.user);
         return { success: true };
       }),
   }),
@@ -449,7 +448,7 @@ export const appRouter = router({
           resourceType: "report",
           resourceCode: plugin.meta.code,
           resourceName: input.resourceName || plugin.meta.name,
-          params: input.params ?? null,
+          params: { input: input.params ?? null, effectiveScope: constrainPlant(await authorizeReport(ctx.user, plugin.meta.code, "view"), input.params) },
           req: ctx.req,
         });
         return { success: true };
@@ -460,7 +459,8 @@ export const appRouter = router({
   wipDailyStatus: router({
     list: protectedProcedure
       .input(z.object({ date: z.string().optional() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        requireAllScope(ctx.user);
         return getWipDailyStatus(input.date);
       }),
   }),

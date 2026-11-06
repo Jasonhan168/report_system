@@ -11,6 +11,7 @@
  *   - 支持按委外厂商、标签品名、封装形式过滤
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, type EngineType, sqlToday, sqlCastStr, sqlAny } from "./_dbClient";
 
@@ -110,7 +111,7 @@ function computeOverdueDays(edd: string | null | undefined): number {
 }
 
 // ─── 联合查询 SQL（集合 A UNION ALL 集合 B）────────────────────────────────────
-function getUnionSql(engine: EngineType): string {
+function getUnionSql(engine: EngineType, access: ReportAccessContext): string {
   return `
 /* ========== 集合 A：非江苏长电厂商 ========== */
 SELECT
@@ -137,7 +138,7 @@ FROM
 (
     SELECT process_type, order_no, order_date, edd, vendor_name, label, part_no,
            vendor_part_no, package_type, lot_no, qty AS order_qty, open_qty
-    FROM v_dwd_order
+    FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
     WHERE date = ${sqlToday(engine)}
       AND production_type = '2:工程'
       AND order_status <> '已结案'
@@ -149,7 +150,7 @@ LEFT JOIN
     SELECT order_no, vendor_part_no, batch_no AS lot_no,
            before_attach, die_attach, wire_bond, molding, testing, test_done,
            update_time
-    FROM v_dws_ab_wip
+    FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip
 ) AS w
 ON o.order_no = w.order_no AND o.vendor_part_no = w.vendor_part_no AND o.lot_no = w.lot_no
 
@@ -189,7 +190,7 @@ FROM
            ${sqlAny(engine, "lot_no")}         AS lot_no,
            sum(qty)            AS order_qty,
            sum(open_qty)       AS open_qty
-    FROM v_dwd_order
+    FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
     WHERE date = ${sqlToday(engine)}
       AND production_type = '2:工程'
       AND order_status <> '已结案'
@@ -202,7 +203,7 @@ LEFT JOIN
     SELECT order_no, vendor_part_no,
            before_attach, die_attach, wire_bond, molding, testing, test_done,
            update_time
-    FROM v_dws_ab_wip
+    FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip
 ) AS w
 ON o.order_no = w.order_no AND o.vendor_part_no = w.vendor_part_no
 `;
@@ -245,10 +246,10 @@ function toRow(r: Record<string, unknown>): Row {
 }
 
 // ─── 数据库查询 ─────────────────────────────────────────────────────────────
-async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const engine = client.engineType;
-  const UNION_SQL = getUnionSql(engine);
+  const UNION_SQL = getUnionSql(engine, access);
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
 
@@ -312,9 +313,9 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const engine = client.engineType;
-  const UNION_SQL = getUnionSql(engine);
+  const UNION_SQL = getUnionSql(engine, access);
 
   const [vendorR, labelR, pkgR] = await Promise.all([
     client.query<{ vendor_name: string }>(
@@ -335,8 +336,8 @@ async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<ExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }
 
@@ -376,7 +377,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions, QueryReturn, ExportR
   filterOptionsInputSchema: undefined,
 
   query:         queryData,
-  filterOptions: (client) => queryFilter(client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery:   queryExport,
 
   emptyQueryResult: {

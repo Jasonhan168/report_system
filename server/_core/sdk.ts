@@ -23,6 +23,7 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  sessionVersion: number;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -169,13 +170,14 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: { expiresInMs?: number; name?: string; sessionVersion: number }
   ): Promise<string> {
     return this.signSession(
       {
         openId,
         appId: ENV.appId,
         name: options.name || "",
+        sessionVersion: options.sessionVersion,
       },
       options
     );
@@ -194,6 +196,7 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      sessionVersion: payload.sessionVersion,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setIssuedAt()
@@ -203,7 +206,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string; exp: number } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; exp: number; sessionVersion: number } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -214,7 +217,8 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name, exp } = payload as Record<string, unknown>;
+      const { openId, appId, name, exp, sessionVersion } = payload as Record<string, unknown>;
+      if (typeof sessionVersion !== "number" || !Number.isInteger(sessionVersion) || sessionVersion < 1 || typeof exp !== "number") return null;
 
       // openId 是必须的；appId 在本地/LDAP 模式下可能为空字符串，允许通过
       if (!isNonEmptyString(openId)) {
@@ -236,6 +240,7 @@ class SDKServer {
         appId: typeof appId === "string" ? appId : "",
         name: typeof name === "string" ? name : "",
         exp: expValue,
+        sessionVersion,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -251,7 +256,8 @@ class SDKServer {
     res: Response | undefined,
     openId: string,
     name: string,
-    exp: number
+    exp: number,
+    sessionVersion: number
   ): Promise<void> {
     if (!res) return;
 
@@ -260,6 +266,7 @@ class SDKServer {
 
     const newToken = await this.createSessionToken(openId, {
       name,
+      sessionVersion,
       expiresInMs: SESSION_IDLE_TIMEOUT_MS,
     });
     const cookieOptions = getSessionCookieOptions(req);
@@ -312,12 +319,12 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    if (!user.isActive) {
-      throw ForbiddenError("Account is disabled");
+    if (!user.isActive || user.sessionVersion !== session.sessionVersion) {
+      throw ForbiddenError("会话已撤销或账号已停用");
     }
 
     // 滑动续期：剩余有效期不足一半时刷新 token
-    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp);
+    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp, session.sessionVersion);
 
     // Update last sign-in time
     await db.upsertUser({
@@ -342,35 +349,16 @@ class SDKServer {
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, sync from OAuth server automatically
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
+    if (!user || !user.isActive || user.sessionVersion !== session.sessionVersion || user.authType !== "oauth") {
+      throw ForbiddenError("OAuth会话已失效");
     }
-
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-
     await db.upsertUser({
       openId: user.openId,
       lastSignedIn: signedInAt,
     });
 
     // 滑动续期
-    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp);
+    await this.renewSessionIfNeeded(req, res, session.openId, session.name, session.exp, session.sessionVersion);
 
     return user;
   }

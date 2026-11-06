@@ -1,3 +1,5 @@
+import { sessionFetch } from "@/lib/session";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAutoTitles } from "@/hooks/useAutoTitles";
@@ -56,6 +58,8 @@ function rowHighlight(edd: string | null | undefined): string {
 }
 
 export default function OutsourceOrderDetail() {
+  const { user } = useAuth();
+  const ownPlant = user?.dataScope === "own" ? user.company?.plant : undefined;
   const search = useSearch();
   const sp = new URLSearchParams(search);
 
@@ -133,7 +137,7 @@ export default function OutsourceOrderDetail() {
       if (plant) params.set("plant", plant);
       // 将 orderNos 数组逐个附加为多个参数
       orderNos.forEach((no) => params.append("orderNos", no));
-      const resp = await fetch(`/api/export/outsource-order-detail?${params}`);
+      const resp = await sessionFetch(`/api/export/outsource-order-detail?${params}`);
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
@@ -289,9 +293,9 @@ export default function OutsourceOrderDetail() {
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted-foreground whitespace-nowrap">分公司</span>
           <Select
-            value={plant || "__all__"}
-            onValueChange={v => { if (!filterLocked) { setPlant(v === "__all__" ? "" : v); setPage(1); } }}
-            disabled={filterLocked}
+            value={ownPlant ?? (plant || "__all__")}
+            onValueChange={v => { if (!filterLocked && !ownPlant) { setPlant(v === "__all__" ? "" : v); setPage(1); } }}
+            disabled={filterLocked || !!ownPlant}
           >
             <SelectTrigger className="w-28 h-8"><SelectValue placeholder="全部" /></SelectTrigger>
             <SelectContent>

@@ -5,6 +5,7 @@
  * 所有字段 ifNull 包裹以应对 Nullable(...) 类型的 NULL 传播问题
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, sqlCastStr, sqlGroupUniqArray, parseArrayResult } from "./_dbClient";
 
@@ -71,17 +72,17 @@ function buildWhere(f: Input): string {
   return parts.join(" AND ");
 }
 
-async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: Row[]; total: number }> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<{ rows: Row[]; total: number }> {
   const where = buildWhere(input);
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 50;
   const offset = (page - 1) * pageSize;
   const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count(*) AS cnt FROM v_dws_ab_wip WHERE ${where}`;
+  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip WHERE ${where}`;
   const dataSql = `
     SELECT ${cols}
-    FROM v_dws_ab_wip
+    FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip
     WHERE ${where}
     ORDER BY update_time DESC, vendor_name, order_no
     LIMIT ${pageSize} OFFSET ${offset}
@@ -105,11 +106,11 @@ async function queryData(client: ReportDbClient, input: Input): Promise<{ rows: 
   return { rows, total };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const engine = client.engineType;
   const sql = `
     SELECT ${sqlGroupUniqArray(engine, "ifNull(vendor_name, '')")} AS vendor_names
-    FROM v_dws_ab_wip
+    FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip
     WHERE ${TOTAL_WIP_EXPR} > 0
   `;
   const r = await client.query<{ vendor_names: unknown }>(sql);
@@ -117,12 +118,12 @@ async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   return { vendorNames: parseArrayResult(row.vendor_names).filter(Boolean).sort() };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<Row[]> {
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<Row[]> {
   const where = buildWhere(input);
   const cols = SELECT_COLS(client.engineType);
   const sql = `
     SELECT ${cols}
-    FROM v_dws_ab_wip
+    FROM ${scopedSource("v_dws_ab_wip", access)} AS v_dws_ab_wip
     WHERE ${where}
     ORDER BY update_time DESC, vendor_name, order_no
     LIMIT 999999
@@ -166,7 +167,7 @@ const plugin: ReportPlugin<Row, Input, void, FilterOptions> = {
   filterOptionsInputSchema: undefined,
 
   query: queryData,
-  filterOptions: (client) => queryFilter(client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery: queryExport,
 
   emptyQueryResult: { rows: [], total: 0 },

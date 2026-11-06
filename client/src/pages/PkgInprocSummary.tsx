@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -265,7 +266,7 @@ export default function PkgInprocSummary() {
         ...(queryParams.vendorName ? { vendorName: queryParams.vendorName } : {}),
         ...(queryParams.packageType ? { packageType: queryParams.packageType } : {}),
       });
-      const resp = await fetch(`/api/export/pkg-inproc-summary?${params.toString()}`);
+      const resp = await sessionFetch(`/api/export/pkg-inproc-summary?${params.toString()}`);
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "导出失败" }));
         toast.error(err.error || "导出失败，请重试");

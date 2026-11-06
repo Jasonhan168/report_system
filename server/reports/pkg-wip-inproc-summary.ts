@@ -9,6 +9,7 @@
  *   - 输出列包含每组最大 update_time
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, sqlToday, sqlCastStr, sqlGroupUniqArray, sqlArrayStringConcat, parseArrayResult } from "./_dbClient";
 
@@ -85,7 +86,7 @@ function fmtDate(v: string | null | undefined): string {
 /** 内层查询：单行粒度（订单 × 供应商料号），已做 NULL 安全化
  *  注：v_dwd_order_agg 未暴露 package_type，需再关联 v_dwd_order 补充；
  *      ClickHouse 18.16.1 单个 SELECT 仅支持一个 JOIN，故用嵌套子查询分两层关联 */
-const INNER_SQL = (engine: ReportDbClient["engineType"]) => `
+const INNER_SQL = (engine: ReportDbClient["engineType"], access: ReportAccessContext) => `
 SELECT
     base.order_no        AS order_no,
     base.label_name      AS label_name,
@@ -125,15 +126,15 @@ SELECT
      + ifNull(wip.testing, 0)
      + ifNull(wip.test_done, 0)) AS wip_qty,
     wip.update_time           AS update_time
-FROM v_dwd_order_agg AS ord
-LEFT JOIN v_dws_ab_wip_agg AS wip
+FROM ${scopedSource("v_dwd_order_agg", access)} AS ord
+LEFT JOIN ${scopedSource("v_dws_ab_wip_agg", access)} AS wip
        ON wip.order_no       = ord.order_no
       AND wip.vendor_part_no = ord.vendor_part_no
 WHERE ord.date = ${sqlToday(engine)}
 ) AS base
 LEFT JOIN (
   SELECT order_no, vendor_part_no, max(ifNull(package_type, '')) AS package_type
-  FROM v_dwd_order
+  FROM ${scopedSource("v_dwd_order", access)} AS v_dwd_order
   WHERE date = ${sqlToday(engine)}
   GROUP BY order_no, vendor_part_no
 ) AS pkg
@@ -171,12 +172,12 @@ function toRow(r: Record<string, unknown>): Row {
 }
 
 // ─── ClickHouse 查询 ─────────────────────────────────────────────────────────
-async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
   const engine = client.engineType;
-  const innerSql = INNER_SQL(engine);
+  const innerSql = INNER_SQL(engine, access);
 
   const countSql = `
 SELECT count(*) AS cnt
@@ -253,9 +254,9 @@ FROM (
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const engine = client.engineType;
-  const innerSql = INNER_SQL(engine);
+  const innerSql = INNER_SQL(engine, access);
   const [labelR, vendorR, pkgR] = await Promise.all([
     client.query<{ label_name: string }>(
       `SELECT DISTINCT label_name FROM (${innerSql}) AS t WHERE label_name != '' ORDER BY label_name`,
@@ -274,8 +275,8 @@ async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<ExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }
 
@@ -314,7 +315,7 @@ const plugin: ReportPlugin<
   filterOptionsInputSchema: undefined,
 
   query: queryData,
-  filterOptions: (client) => queryFilter(client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery: queryExport,
 
   emptyQueryResult: {

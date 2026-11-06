@@ -6,33 +6,24 @@
  *   - outsource_order_detail → /api/export/outsource-order-detail
  *   - ...
  */
-import type { Request, Router } from "express";
+import type { Request, Response, Router } from "express";
+import { TRPCError } from "@trpc/server";
+import { z, ZodError } from "zod";
+import { authorizeReport, constrainPlant, type ReportAccessContext } from "./reportAccess";
 import ExcelJS from "exceljs";
 import { sdk } from "./_core/sdk";
 import {
-  checkUserReportPermission, getReportModuleByCode, getReportModuleDatasource,
-  getAllUsers, listOperationLogsForExport,
+  getReportModuleDatasource, listOperationLogsForExport,
 } from "./db";
 import { getReportDbClient } from "./datasource";
 import { ALL_REPORTS } from "./reports/_registry";
 import { extractRows, renderExcel } from "./reports/_excel";
 import { logOperation } from "./_core/operationLog";
-import { COOKIE_NAME } from "@shared/const";
 
 /** 从请求 cookie 解析当前用户 */
-async function resolveUser(req: Request) {
-  const cookieHeader = req.headers.cookie || "";
-  const cookieMap = new Map(
-    cookieHeader.split(";").map((c) => c.trim().split("=").map(decodeURIComponent) as [string, string])
-  );
-  const sessionToken = cookieMap.get(COOKIE_NAME);
-  if (!sessionToken) return null;
-  const payload = await sdk.verifySession(sessionToken);
-  if (!payload) return null;
-  const allUsers = await getAllUsers();
-  const user = allUsers.find((u) => u.openId === payload.openId);
-  if (!user || !user.isActive) return null;
-  return user;
+async function resolveUser(req: Request, res?: Response) {
+  try { return await sdk.authenticateLocalRequest(req, res); }
+  catch { return null; }
 }
 
 /** 下划线 code → 连字符 URL 段 */
@@ -44,9 +35,10 @@ function codeToPath(code: string): string {
 function parseQuery(q: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(q)) {
-    if (Array.isArray(v)) {
-      if (v.length > 0) out[k] = v as string[];
-    } else if (typeof v === "string" && v !== "") {
+    if (k === "orderNos" && typeof v === "string") {
+      out[k] = v ? [v] : [];
+    } else {
+      // 保留非法结构交由 schema 拒绝，不能静默丢弃越权 plant。
       out[k] = v;
     }
   }
@@ -62,7 +54,7 @@ export function registerExportRoutes(app: Router) {
     let success = true;
     let errorMsg: string | null = null;
     try {
-      user = await resolveUser(req);
+      user = await resolveUser(req, res);
       if (!user) {
         success = false;
         errorMsg = "未登录或会话已过期";
@@ -116,11 +108,12 @@ export function registerExportRoutes(app: Router) {
     app.get(urlPath, async (req, res) => {
       const start = Date.now();
       let user: Awaited<ReturnType<typeof resolveUser>> = null;
-      const input = parseQuery(req.query as Record<string, unknown>);
+      let input = parseQuery(req.query as Record<string, unknown>);
+      let access: ReportAccessContext | undefined;
       let success = true;
       let errorMsg: string | null = null;
       try {
-        user = await resolveUser(req);
+        user = await resolveUser(req, res);
         if (!user) {
           success = false;
           errorMsg = "未登录或会话已过期";
@@ -128,30 +121,16 @@ export function registerExportRoutes(app: Router) {
           return;
         }
 
-        if (user.role !== "admin") {
-          const mod = await getReportModuleByCode(plugin.meta.code);
-          if (!mod) {
-            success = false;
-            errorMsg = "无导出权限";
-            res.status(403).json({ error: errorMsg });
-            return;
-          }
-          const allowed = await checkUserReportPermission(user.id, mod.id, "export");
-          if (!allowed) {
-            success = false;
-            errorMsg = "无导出权限";
-            res.status(403).json({ error: errorMsg });
-            return;
-          }
-        }
+        input = plugin.exportInputSchema.and(z.object({ plant: z.string().max(128).optional() })).parse(input) as Record<string, unknown>;
+        access = constrainPlant(await authorizeReport(user, plugin.meta.code, "export"), input);
 
         const ds = await getReportModuleDatasource(plugin.meta.code);
 
         let exported: unknown;
         if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
           const client = getReportDbClient(ds);
-          exported = await plugin.exportQuery(client, input);
-        } else if (plugin.mockExport) {
+          exported = await plugin.exportQuery(client, input, access);
+        } else if (access.scope === "all" && plugin.mockExport) {
           exported = plugin.mockExport(input);
         } else {
           success = false;
@@ -166,7 +145,8 @@ export function registerExportRoutes(app: Router) {
         success = false;
         errorMsg = err instanceof Error ? err.message : String(err);
         console.error(`[Export] ${plugin.meta.code} error:`, err);
-        if (!res.headersSent) res.status(500).json({ error: "导出失败，请重试" });
+        const status = err instanceof ZodError ? 400 : err instanceof TRPCError && err.code === "FORBIDDEN" ? 403 : err instanceof TRPCError && err.code === "BAD_REQUEST" ? 400 : 500;
+        if (!res.headersSent) res.status(status).json({ error: status === 500 ? "导出失败，请重试" : status === 400 ? "导出参数不正确" : errorMsg });
       } finally {
         // 记录报表导出日志（含查询条件）
         logOperation({
@@ -175,7 +155,7 @@ export function registerExportRoutes(app: Router) {
           resourceType: "report",
           resourceCode: plugin.meta.code,
           resourceName: plugin.meta.name,
-          params: input,
+          params: { input, effectiveScope: access },
           req,
           success,
           errorMsg,
@@ -194,6 +174,7 @@ const OPERATION_LABELS: Record<string, string> = {
   view: "查看报表",
   export: "导出报表",
   drill_down: "下钻",
+  security_change: "安全配置变更",
 };
 
 function formatDateTime(d: Date | string | null | undefined): string {

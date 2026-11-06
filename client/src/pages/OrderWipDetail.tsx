@@ -1,3 +1,5 @@
+import { sessionFetch } from "@/lib/session";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef } from "react";
 import { useAutoTitles } from "@/hooks/useAutoTitles";
@@ -239,6 +241,8 @@ const NUM_COL_START = 6;
 const NUM_COL_END   = 17;
 
 export default function OrderWipDetail() {
+  const { user } = useAuth();
+  const ownPlant = user?.dataScope === "own" ? user.company?.plant : undefined;
   const search = useSearch();
   const sp = new URLSearchParams(search);
   const [, navigate] = useLocation();
@@ -322,7 +326,7 @@ export default function OrderWipDetail() {
         ...(queryParams.productionType ? { productionType: queryParams.productionType } : {}),
         ...(queryParams.plant          ? { plant:          queryParams.plant }          : {}),
       });
-      const resp = await fetch(`/api/export/order-wip-detail?${params.toString()}`);
+      const resp = await sessionFetch(`/api/export/order-wip-detail?${params.toString()}`);
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "导出失败" }));
         toast.error((err as { error?: string }).error || "导出失败，请重试");
@@ -523,9 +527,9 @@ export default function OrderWipDetail() {
               分公司
             </Label>
             <FuzzyCombobox
-              options={filterOpts?.plants ?? []}
-              value={plant}
-              onChange={filterLocked ? () => {} : setPlant}
+              options={ownPlant ? [ownPlant] : filterOpts?.plants ?? []}
+              value={ownPlant ?? plant}
+              onChange={filterLocked || ownPlant ? () => {} : setPlant}
               placeholder="全部（可输入筛选）"
               emptyText="无匹配的分公司"
             />

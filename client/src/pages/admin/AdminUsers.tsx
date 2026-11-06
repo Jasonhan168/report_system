@@ -1,5 +1,12 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../../server/routers";
+
+type Account = inferRouterOutputs<AppRouter>["users"]["list"][number];
+type Company = inferRouterOutputs<AppRouter>["companies"]["list"][number];
+const scopeLabels = { none: "待授权", own: "本公司", all: "全部分公司" };
+const authLabels = { local: "本地密码", ldap: "AD", oauth: "OAuth" };
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -15,156 +22,74 @@ import { toast } from "sonner";
 import { Users, RefreshCw, UserPlus, KeyRound, Loader2 } from "lucide-react";
 
 // ─── 创建用户对话框 ────────────────────────────────────────────────────────────
-function CreateUserDialog({
-  open,
-  onClose,
-  onSuccess,
-}: {
-  open: boolean;
+function CreateUserDialog({ user, companies, onClose, onSuccess }: {
+  user?: Account;
+  companies: Company[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const [form, setForm] = useState({
-    username: "",
-    displayName: "",
-    password: "",
-    email: "",
-    role: "user" as "user" | "admin",
-    department: "",
+    username: user?.openId ?? "", displayName: user?.name ?? "",
+    email: user?.email ?? "", department: user?.department ?? "", password: "",
+    role: user?.role ?? "user", authType: user?.authType ?? "ldap",
+    dataScope: user?.dataScope ?? "none", companyId: user?.companyId ?? null,
   });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const createUser = trpc.users.create.useMutation({
-    onSuccess: () => {
-      toast.success("用户创建成功");
-      onSuccess();
-      onClose();
-      setForm({ username: "", displayName: "", password: "", email: "", role: "user", department: "" });
-      setErrors({});
-    },
-    onError: (err) => {
-      toast.error(err.message || "创建失败");
-    },
+  const [error, setError] = useState("");
+  const save = trpc.users.save.useMutation({
+    onSuccess: () => { toast.success("账号配置已保存，旧会话已撤销"); onSuccess(); onClose(); },
+    onError: err => setError(err.message),
   });
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!form.username.trim()) e.username = "用户名不能为空";
-    else if (!/^[a-zA-Z0-9_.-]+$/.test(form.username)) e.username = "只能包含字母、数字、下划线、点和连字符";
-    if (!form.displayName.trim()) e.displayName = "显示名不能为空";
-    if (!form.password) e.password = "密码不能为空";
-    else if (form.password.length < 6) e.password = "密码至少6位";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "邮箱格式不正确";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+  const submit = () => {
+    if (!form.username.trim() || !form.displayName.trim()) return setError("请填写用户名和显示名");
+    if (form.dataScope === "own" && !form.companyId) return setError("请选择所属分公司");
+    if (form.authType === "local" && (!user || user.authType !== "local") && !form.password) return setError("新本地账号必须设置密码");
+    if (form.password && (form.password.length < 6 || new TextEncoder().encode(form.password).length > 72)) return setError("密码至少6位且不超过72字节");
+    save.mutate({ ...form, userId: user?.id, password: form.authType === "local" ? form.password || undefined : undefined });
   };
-
-  const handleSubmit = () => {
-    if (!validate()) return;
-    createUser.mutate({
-      username: form.username.trim(),
-      displayName: form.displayName.trim(),
-      password: form.password,
-      email: form.email.trim() || undefined,
-      role: form.role,
-      department: form.department.trim() || undefined,
-    });
-  };
-
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+    <Dialog open onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus size={16} />
-            创建本地用户
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            仅在本地认证模式（AUTH_MODE=local）下可用
-          </DialogDescription>
+          <DialogTitle>{user ? "编辑账号配置" : "创建用户"}</DialogTitle>
+          <DialogDescription>认证方式、数据范围与报表权限分别配置；普通用户不会因全范围授权获得管理权限。</DialogDescription>
         </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">用户名 <span className="text-destructive">*</span></Label>
-              <Input
-                placeholder="登录用户名"
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="h-9 text-sm"
-              />
-              {errors.username && <p className="text-xs text-destructive">{errors.username}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">显示名 <span className="text-destructive">*</span></Label>
-              <Input
-                placeholder="姓名/昵称"
-                value={form.displayName}
-                onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                className="h-9 text-sm"
-              />
-              {errors.displayName && <p className="text-xs text-destructive">{errors.displayName}</p>}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">初始密码 <span className="text-destructive">*</span></Label>
-            <Input
-              type="password"
-              placeholder="至少6位"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="h-9 text-sm"
-            />
-            {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">邮箱</Label>
-              <Input
-                type="email"
-                placeholder="可选"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="h-9 text-sm"
-              />
-              {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">部门</Label>
-              <Input
-                placeholder="可选"
-                value={form.department}
-                onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="h-9 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">角色</Label>
-            <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as "user" | "admin" })}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="user">普通用户</SelectItem>
-                <SelectItem value="admin">管理员</SelectItem>
+        <div className="grid grid-cols-2 gap-4 py-2">
+          <div className="space-y-2"><Label htmlFor="account-name">用户名</Label><Input id="account-name" disabled={!!user} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="AD账号使用短账号" /></div>
+          <div className="space-y-2"><Label htmlFor="account-display">显示名</Label><Input id="account-display" value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} /></div>
+          <div className="space-y-2"><Label htmlFor="account-email">邮箱</Label><Input id="account-email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+          <div className="space-y-2"><Label htmlFor="account-dept">部门</Label><Input id="account-dept" value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} /></div>
+          <div className="space-y-2"><Label>认证方式</Label>
+            <Select value={form.authType} onValueChange={v => setForm({ ...form, authType: v as Account["authType"], password: "" })}>
+              <SelectTrigger aria-label="认证方式"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="ldap">AD域认证</SelectItem><SelectItem value="local">本地密码</SelectItem>
+                {user?.authType === "oauth" && <SelectItem value="oauth">OAuth（已有账号）</SelectItem>}
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2"><Label>角色</Label>
+            <Select value={form.role} onValueChange={v => setForm({ ...form, role: v as Account["role"], dataScope: v === "admin" ? "all" : form.dataScope })}>
+              <SelectTrigger aria-label="角色"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="user">普通用户</SelectItem><SelectItem value="admin">系统管理员</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2"><Label>数据范围</Label>
+            <Select disabled={form.role === "admin"} value={form.dataScope} onValueChange={v => setForm({ ...form, dataScope: v as Account["dataScope"] })}>
+              <SelectTrigger aria-label="数据范围"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(scopeLabels).map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2"><Label>所属分公司</Label>
+            <Select value={form.companyId?.toString() ?? "unset"} onValueChange={v => setForm({ ...form, companyId: v === "unset" ? null : Number(v) })}>
+              <SelectTrigger aria-label="所属分公司"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="unset">未配置</SelectItem>
+                {companies.map(c => <SelectItem key={c.id} value={String(c.id)} disabled={!c.isActive}>{c.name}（{c.plant}）{!c.isActive && " · 已停用"}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {form.authType === "local" && <div className="space-y-2 col-span-2"><Label htmlFor="account-password">{user?.authType === "local" ? "新密码（留空不修改）" : "初始密码（必填）"}</Label><Input id="account-password" type="password" autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></div>}
+          {user && user.authType !== form.authType && <p className="col-span-2 text-sm text-amber-700">正在更改账号认证策略：切换到 AD 将清除本地密码，切换到本地必须设置新密码。保存后旧会话失效。</p>}
+          <p className="col-span-2 text-xs text-muted-foreground">保存后请在“报表权限”中分配可查看、可导出的报表。仅配置分公司或范围不会自动授予报表权限。</p>
+          {error && <p role="alert" className="col-span-2 text-sm text-destructive">{error}</p>}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={createUser.isPending}>
-            取消
-          </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={createUser.isPending}>
-            {createUser.isPending ? <><Loader2 size={13} className="mr-1.5 animate-spin" />创建中...</> : "创建用户"}
-          </Button>
-        </DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>取消</Button><Button onClick={submit} disabled={save.isPending}>{save.isPending ? "保存中..." : "保存账号"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -199,7 +124,7 @@ function ResetPasswordDialog({
 
   const handleSubmit = () => {
     if (!newPassword) { setError("请输入新密码"); return; }
-    if (newPassword.length < 6) { setError("密码至少6位"); return; }
+    if (newPassword.length < 6 || new TextEncoder().encode(newPassword).length > 72) { setError("密码至少6位且不超过72字节"); return; }
     setError("");
     resetPassword.mutate({ userId, newPassword });
   };
@@ -246,15 +171,38 @@ function ResetPasswordDialog({
 }
 
 // ─── 主页面 ────────────────────────────────────────────────────────────────────
+function CompanyManager({ companies, onClose }: { companies: Company[]; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const empty = { id: undefined as number | undefined, plant: "", name: "", isActive: true };
+  const [form, setForm] = useState(empty);
+  const save = trpc.companies.save.useMutation({
+    onSuccess: () => { toast.success("分公司已保存"); utils.companies.list.invalidate(); setForm(empty); },
+    onError: err => toast.error(err.message),
+  });
+  return <Dialog open onOpenChange={v => !v && onClose()}><DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+    <DialogHeader><DialogTitle>分公司管理</DialogTitle><DialogDescription>编码须与数仓 plant 完全一致，创建后不可修改。停用后所属本公司范围用户将失去业务访问权限。</DialogDescription></DialogHeader>
+    <Table><TableHeader><TableRow><TableHead>编码</TableHead><TableHead>名称</TableHead><TableHead>状态</TableHead><TableHead>操作</TableHead></TableRow></TableHeader>
+      <TableBody>{companies.map(c => <TableRow key={c.id}><TableCell>{c.plant}</TableCell><TableCell>{c.name}</TableCell><TableCell>{c.isActive ? "启用" : "停用"}</TableCell><TableCell><Button variant="ghost" size="sm" onClick={() => setForm(c)}>编辑</Button></TableCell></TableRow>)}</TableBody>
+    </Table>
+    <div className="space-y-3 border-t pt-4">
+      <p className="text-sm font-medium">{form.id ? "编辑分公司" : "新增分公司"}</p>
+      <Label htmlFor="company-plant">分公司编码</Label><Input id="company-plant" disabled={!!form.id} placeholder="与数仓 plant 一致" value={form.plant} onChange={e => setForm({ ...form, plant: e.target.value })} />
+      <Label htmlFor="company-name">分公司名称</Label><Input id="company-name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+      <div className="flex items-center gap-2"><Switch id="company-active" checked={form.isActive} onCheckedChange={v => setForm({ ...form, isActive: v })} /><Label htmlFor="company-active">启用</Label></div>
+    </div>
+    <DialogFooter><Button variant="outline" onClick={() => setForm(empty)}>清空 / 新增</Button><Button disabled={save.isPending || !form.plant.trim() || !form.name.trim()} onClick={() => save.mutate(form)}>保存分公司</Button></DialogFooter>
+  </DialogContent></Dialog>;
+}
+
 export default function AdminUsers() {
   const { data: users, isLoading, refetch } = trpc.users.list.useQuery();
-  const { data: authModeData } = trpc.auth.authMode.useQuery();
-  const isLocalMode = authModeData?.mode === "local";
-
-  const setRole = trpc.users.setRole.useMutation({ onSuccess: () => { toast.success("角色已更新"); refetch(); } });
-  const setActive = trpc.users.setActive.useMutation({ onSuccess: () => { toast.success("状态已更新"); refetch(); } });
-
-  const [createOpen, setCreateOpen] = useState(false);
+  const { data: companies = [] } = trpc.companies.list.useQuery();
+  const setActive = trpc.users.setActive.useMutation({
+    onSuccess: () => { toast.success("状态已更新"); refetch(); },
+    onError: err => toast.error(err.message),
+  });
+  const [editor, setEditor] = useState<Account | "new" | null>(null);
+  const [companyOpen, setCompanyOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
 
   return (
@@ -265,12 +213,8 @@ export default function AdminUsers() {
           <p className="text-xs text-muted-foreground mt-0.5">管理系统用户账号及角色权限</p>
         </div>
         <div className="flex items-center gap-2">
-          {isLocalMode && (
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
-              <UserPlus size={13} />
-              新建用户
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={() => setCompanyOpen(true)}>分公司管理</Button>
+          <Button size="sm" onClick={() => setEditor("new")} className="gap-1.5"><UserPlus size={13} />新建用户</Button>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5">
             <RefreshCw size={13} />刷新
           </Button>
@@ -283,16 +227,12 @@ export default function AdminUsers() {
           <span className="text-xs text-muted-foreground">
             共 <span className="font-semibold text-foreground">{users?.length || 0}</span> 个用户
           </span>
-          {authModeData && (
-            <Badge variant="outline" className="ml-auto text-xs">
-              认证模式：{authModeData.mode === "local" ? "本地账号" : authModeData.mode === "ldap" ? "AD域" : "OAuth"}
-            </Badge>
-          )}
+          <Badge variant="outline" className="ml-auto text-xs">按账号配置认证方式与数据范围</Badge>
         </div>
         <Table>
           <TableHeader>
             <TableRow className="bg-secondary/50 hover:bg-secondary/50">
-              {["用户名", "邮箱", "登录方式", "角色", "状态", "注册时间", "最后登录", ...(isLocalMode ? ["操作"] : [])].map(h => (
+              {["用户名 / 姓名", "邮箱", "认证方式", "角色", "分公司 / 范围", "状态", "注册时间", "最后登录", "操作"].map(h => (
                 <TableHead key={h} className="text-xs font-semibold px-4">{h}</TableHead>
               ))}
             </TableRow>
@@ -301,27 +241,20 @@ export default function AdminUsers() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: isLocalMode ? 8 : 7 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : users?.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="px-4 py-3 font-medium text-sm">{user.name || "-"}</TableCell>
+                <TableCell className="px-4 py-3 font-medium text-sm">{user.openId}<div className="text-xs text-muted-foreground">{user.name}</div></TableCell>
                 <TableCell className="px-4 py-3 text-xs text-muted-foreground">{user.email || "-"}</TableCell>
-                <TableCell className="px-4 py-3 text-xs">{user.loginMethod || "-"}</TableCell>
-                <TableCell className="px-4 py-3">
-                  <Select
-                    value={user.role}
-                    onValueChange={(val) => setRole.mutate({ userId: user.id, role: val as "user" | "admin" })}
-                  >
-                    <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">普通用户</SelectItem>
-                      <SelectItem value="admin">管理员</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <TableCell className="px-4 py-3 text-xs">{authLabels[user.authType]}</TableCell>
+                <TableCell className="px-4 py-3 text-xs">{user.role === "admin" ? "系统管理员" : "普通用户"}</TableCell>
+                <TableCell className="px-4 py-3 text-xs">
+                  <div>{companies.find(c => c.id === user.companyId)?.name ?? "未配置"}</div>
+                  <Badge variant="outline">{scopeLabels[user.dataScope]}</Badge>
                 </TableCell>
                 <TableCell className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -341,19 +274,10 @@ export default function AdminUsers() {
                 <TableCell className="px-4 py-3 text-xs text-muted-foreground">
                   {new Date(user.lastSignedIn).toLocaleString("zh-CN")}
                 </TableCell>
-                {isLocalMode && (
-                  <TableCell className="px-4 py-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                      onClick={() => setResetTarget({ id: user.id, name: user.name || user.openId })}
-                    >
-                      <KeyRound size={11} />
-                      重置密码
-                    </Button>
-                  </TableCell>
-                )}
+                <TableCell className="px-4 py-3">
+                  <Button variant="ghost" size="sm" onClick={() => setEditor(user)}>编辑</Button>
+                  {user.authType === "local" && <Button variant="ghost" size="sm" onClick={() => setResetTarget({ id: user.id, name: user.name || user.openId })}><KeyRound size={11} />重置密码</Button>}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -361,11 +285,8 @@ export default function AdminUsers() {
       </div>
 
       {/* 创建用户对话框 */}
-      <CreateUserDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSuccess={() => refetch()}
-      />
+      {editor && <CreateUserDialog user={editor === "new" ? undefined : editor} companies={companies} onClose={() => setEditor(null)} onSuccess={() => refetch()} />}
+      {companyOpen && <CompanyManager companies={companies} onClose={() => setCompanyOpen(false)} />}
 
       {/* 重置密码对话框 */}
       {resetTarget && (

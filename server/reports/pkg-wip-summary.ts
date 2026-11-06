@@ -7,6 +7,7 @@
  *   - 导出带合计行（不受分页影响，后端单独聚合）
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import { generateMockWipData, generateMockFilterOptions, type WipRecord } from "../mockData";
 import type { ReportPlugin, QueryResult } from "./_types";
 import { type ReportDbClient, type EngineType, sqlGroupArray, parseArrayResult } from "./_dbClient";
@@ -45,7 +46,7 @@ function escStr(val: string): string {
   return val.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-const INNER_SQL = `
+const INNER_SQL = (access: ReportAccessContext) => `
 SELECT
     ord.date,
     ord.order_no,
@@ -60,8 +61,8 @@ SELECT
     wip.testing,
     wip.test_done,
     (((wip.die_attach + wip.wire_bond) + wip.molding) + wip.testing) + wip.test_done AS wip_qty
-FROM v_dwd_order_agg AS ord
-LEFT JOIN v_dwd_ab_wip_agg AS wip
+FROM ${scopedSource("v_dwd_order_agg", access)} AS ord
+LEFT JOIN ${scopedSource("v_dwd_ab_wip_agg", access)} AS wip
     ON  wip.date           = ord.date
     AND wip.order_no       = ord.order_no
     AND wip.vendor_part_no = ord.vendor_part_no`;
@@ -94,7 +95,7 @@ function toRec(row: Record<string, unknown>): WipRecord {
 }
 
 // ─── ClickHouse / Doris 查询 ─────────────────────────────────────────────────────────
-async function queryData(client: ReportDbClient, input: SummaryInput): Promise<SummaryQueryReturn> {
+async function queryData(client: ReportDbClient, input: SummaryInput, access: ReportAccessContext): Promise<SummaryQueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
@@ -104,7 +105,7 @@ async function queryData(client: ReportDbClient, input: SummaryInput): Promise<S
 SELECT count(*) AS cnt
 FROM (
   SELECT label_name, vendor_part_no, vendor_name
-  FROM (${INNER_SQL}) AS t
+  FROM (${INNER_SQL(access)}) AS t
   WHERE ${where}
   GROUP BY label_name, vendor_part_no, vendor_name
 ) AS t2`;
@@ -120,7 +121,7 @@ SELECT
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty,
     ${sqlGroupArray(engine, "order_no")} AS order_nos
-FROM (${INNER_SQL}) AS t
+FROM (${INNER_SQL(access)}) AS t
 WHERE ${where}
 GROUP BY label_name, vendor_part_no, vendor_name
 ORDER BY label_name, vendor_name
@@ -135,7 +136,7 @@ SELECT
     sum(testing)      AS testing,
     sum(test_done)    AS test_done,
     sum(wip_qty)      AS wip_qty
-FROM (${INNER_SQL}) AS t
+FROM (${INNER_SQL(access)}) AS t
 WHERE ${where}`;
 
   const [countR, dataR, totalR] = await Promise.all([
@@ -161,14 +162,14 @@ WHERE ${where}`;
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ReportDbClient, input: SummaryFilterInput): Promise<SummaryFilterOptions> {
+async function queryFilter(client: ReportDbClient, input: SummaryFilterInput, access: ReportAccessContext): Promise<SummaryFilterOptions> {
   const safeDate = escStr(input.date);
   const [labelR, vendorR] = await Promise.all([
     client.query<{ label_name: string }>(
-      `SELECT DISTINCT label_name FROM (${INNER_SQL}) AS t WHERE date = '${safeDate}' ORDER BY label_name`,
+      `SELECT DISTINCT label_name FROM (${INNER_SQL(access)}) AS t WHERE date = '${safeDate}' ORDER BY label_name`,
     ),
     client.query<{ vendor_name: string }>(
-      `SELECT DISTINCT vendor_name FROM (${INNER_SQL}) AS t WHERE date = '${safeDate}' ORDER BY vendor_name`,
+      `SELECT DISTINCT vendor_name FROM (${INNER_SQL(access)}) AS t WHERE date = '${safeDate}' ORDER BY vendor_name`,
     ),
   ]);
   return {
@@ -177,8 +178,8 @@ async function queryFilter(client: ReportDbClient, input: SummaryFilterInput): P
   };
 }
 
-async function queryExport(client: ReportDbClient, input: SummaryInput): Promise<SummaryExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: SummaryInput, access: ReportAccessContext): Promise<SummaryExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }
 

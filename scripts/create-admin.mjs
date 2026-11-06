@@ -110,8 +110,8 @@ async function main() {
 
   // 获取输入
   const username = await prompt("请输入管理员用户名（英文，如 admin）：");
-  if (!username || !/^[a-zA-Z0-9_.-]+$/.test(username)) {
-    console.error("❌ 用户名只能包含字母、数字、下划线、点和连字符");
+  if (!username || !/^[a-zA-Z0-9_.-]{1,64}$/.test(username)) {
+    console.error("❌ 用户名限1–64位，只能包含字母、数字、下划线、点和连字符");
     process.exit(1);
   }
 
@@ -122,8 +122,8 @@ async function main() {
   }
 
   const password = await prompt("请输入密码（至少6位）：", true);
-  if (!password || password.length < 6) {
-    console.error("❌ 密码至少6位");
+  if (!password || password.length < 6 || Buffer.byteLength(password, "utf8") > 72) {
+    console.error("❌ 密码至少6位且不超过72字节");
     process.exit(1);
   }
 
@@ -161,9 +161,9 @@ async function main() {
 
     // 插入管理员用户
     await conn.execute(
-      `INSERT INTO users (openId, name, loginMethod, role, isActive, passwordHash, lastSignedIn)
-       VALUES (?, ?, 'local', 'admin', TRUE, ?, NOW())`,
-      [username, displayName, passwordHash]
+      `INSERT INTO users (openId, name, loginMethod, role, isActive, passwordHash, lastSignedIn, authType, dataScope)
+       VALUES (?, ?, 'local', 'admin', TRUE, ?, NOW(), 'local', 'all')`,
+      [username.toLowerCase(), displayName, passwordHash]
     );
 
     console.log("\n╔══════════════════════════════════════╗");

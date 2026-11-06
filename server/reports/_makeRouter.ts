@@ -12,24 +12,11 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-import { getReportModuleByCode, checkUserReportPermission, getReportModuleDatasource } from "../db";
+import { getReportModuleDatasource } from "../db";
 import { getReportDbClient } from "../datasource";
 import { logOperation } from "../_core/operationLog";
 import type { ReportPlugin } from "./_types";
-
-/** 权限检查辅助函数：管理员放行；否则查 report_modules + report_permissions */
-async function assertPermission(
-  user: { id: number; role: string },
-  code: string,
-  type: "view" | "export",
-  errMsg: string,
-) {
-  if (user.role === "admin") return;
-  const mod = await getReportModuleByCode(code);
-  if (!mod) throw new TRPCError({ code: "FORBIDDEN", message: errMsg });
-  const allowed = await checkUserReportPermission(user.id, mod.id, type);
-  if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: errMsg });
-}
+import { authorizeReport, constrainPlant } from "../reportAccess";
 
 /** 生成标准的报表 tRPC 子路由 */
 export function makeReportRouter<
@@ -42,31 +29,34 @@ export function makeReportRouter<
 >(p: ReportPlugin<Row, Input, FilterInput, FilterOptions, QueryReturn, ExportReturn>) {
   const { code } = p.meta;
 
-  const filterInputSchema = p.filterOptionsInputSchema ?? z.void();
+  const plantSchema = z.object({ plant: z.string().max(128).optional() });
+  const filterInputSchema = p.filterOptionsInputSchema
+    ? p.filterOptionsInputSchema.and(plantSchema)
+    : plantSchema.optional();
 
   return router({
     // ─── 权限检查 ──────────────────────────────────────────────────────────
     checkPermission: protectedProcedure
       .input(z.object({ type: z.enum(["view", "export"]) }))
       .query(async ({ ctx, input }) => {
-        if (ctx.user.role === "admin") return { allowed: true };
-        const mod = await getReportModuleByCode(code);
-        if (!mod) return { allowed: false };
-        const allowed = await checkUserReportPermission(ctx.user.id, mod.id, input.type);
-        return { allowed };
+        try { await authorizeReport(ctx.user, code, input.type); return { allowed: true }; }
+        catch (error) {
+          if (error instanceof TRPCError && error.code === "FORBIDDEN") return { allowed: false };
+          throw error;
+        }
       }),
 
     // ─── 筛选项 ────────────────────────────────────────────────────────────
     filterOptions: protectedProcedure
       .input(filterInputSchema)
       .query(async ({ ctx, input }) => {
-        await assertPermission(ctx.user, code, "view", "无查看权限");
+        const access = constrainPlant(await authorizeReport(ctx.user, code, "view"), input);
         const ds = await getReportModuleDatasource(code);
         if (ds && (ds.type === "clickhouse" || ds.type === "doris") && p.filterOptions) {
           const client = getReportDbClient(ds);
-          return p.filterOptions(client, input as FilterInput);
+          return p.filterOptions(client, input as FilterInput, access);
         }
-        if (p.mockFilterOptions) {
+        if (access.scope === "all" && p.mockFilterOptions) {
           return p.mockFilterOptions(input as FilterInput);
         }
         return p.emptyFilterOptions ?? ({} as FilterOptions);
@@ -74,9 +64,9 @@ export function makeReportRouter<
 
     // ─── 分页查询 ──────────────────────────────────────────────────────────
     query: protectedProcedure
-      .input(p.inputSchema)
+      .input(p.inputSchema.and(z.object({ plant: z.string().max(128).optional() })))
       .query(async ({ ctx, input }) => {
-        await assertPermission(ctx.user, code, "view", "无查看权限");
+        const access = constrainPlant(await authorizeReport(ctx.user, code, "view"), input);
         const ds = await getReportModuleDatasource(code);
         const start = Date.now();
         let success = true;
@@ -84,9 +74,9 @@ export function makeReportRouter<
         try {
           if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
             const client = getReportDbClient(ds);
-            return await p.query(client, input as Input);
+            return await p.query(client, input as Input, access);
           }
-          if (p.mockQuery) {
+          if (access.scope === "all" && p.mockQuery) {
             return p.mockQuery(input as Input);
           }
           return p.emptyQueryResult;
@@ -102,7 +92,7 @@ export function makeReportRouter<
             resourceType: "report",
             resourceCode: code,
             resourceName: p.meta.name,
-            params: input,
+            params: { input, effectiveScope: access },
             req: ctx.req,
             success,
             errorMsg,
@@ -113,18 +103,26 @@ export function makeReportRouter<
 
     // ─── 导出数据 ──────────────────────────────────────────────────────────
     exportData: protectedProcedure
-      .input(p.exportInputSchema)
+      .input(p.exportInputSchema.and(z.object({ plant: z.string().max(128).optional() })))
       .query(async ({ ctx, input }) => {
-        await assertPermission(ctx.user, code, "export", "无导出权限");
-        const ds = await getReportModuleDatasource(code);
-        if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
-          const client = getReportDbClient(ds);
-          return p.exportQuery(client, input as Input);
+        const access = constrainPlant(await authorizeReport(ctx.user, code, "export"), input);
+        const start = Date.now();
+        let errorMsg: string | null = null;
+        try {
+          const ds = await getReportModuleDatasource(code);
+          if (ds && (ds.type === "clickhouse" || ds.type === "doris")) {
+            return await p.exportQuery(getReportDbClient(ds), input as Input, access);
+          }
+          if (access.scope === "all" && p.mockExport) return p.mockExport(input as Input);
+          return (p.emptyExportRows ?? []) as ExportReturn;
+        } catch (error) {
+          errorMsg = error instanceof Error ? error.message : String(error);
+          throw error;
+        } finally {
+          logOperation({ user: ctx.user, action: "export", resourceType: "report", resourceCode: code,
+            resourceName: p.meta.name, params: { input, effectiveScope: access }, req: ctx.req,
+            success: errorMsg === null, errorMsg, durationMs: Date.now() - start }).catch(() => {});
         }
-        if (p.mockExport) {
-          return p.mockExport(input as Input);
-        }
-        return (p.emptyExportRows ?? []) as ExportReturn;
       }),
   });
 }

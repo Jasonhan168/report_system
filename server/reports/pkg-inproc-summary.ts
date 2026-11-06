@@ -30,6 +30,7 @@
  * 同一 (order_no, vendor_part_no) 存在多批次时订单侧数量会按批次重复参与聚合。
  */
 import { z } from "zod";
+import { scopedSource, type ReportAccessContext } from "./_scope";
 import type { ReportPlugin } from "./_types";
 import { type ReportDbClient, sqlCastStr, sqlGroupUniqArray, sqlArrayStringConcat, parseArrayResult } from "./_dbClient";
 
@@ -105,7 +106,7 @@ function fmtDate(v: string | null | undefined): string {
 }
 
 /** 内层查询：订单 × 批次单行粒度，直接取自 v_dwd_order_wip 并做 NULL 安全化 */
-const INNER_SQL = `
+const INNER_SQL = (access: ReportAccessContext) => `
 SELECT
     ifNull(order_no, '')       AS order_no,
     ifNull(label, '')          AS label_name,
@@ -125,7 +126,7 @@ SELECT
      + ifNull(testing, 0)
      + ifNull(test_done, 0))   AS wip_qty,
     update_time                AS update_time
-FROM v_dwd_order_wip`;
+FROM ${scopedSource("v_dwd_order_wip", access)} AS v_dwd_order_wip`;
 
 function buildWhere(p: Input): string {
   const conds: string[] = [];
@@ -155,7 +156,7 @@ function toRow(r: Record<string, unknown>): Row {
 }
 
 // ─── 数据查询 ────────────────────────────────────────────────────────────────
-async function queryData(client: ReportDbClient, input: Input): Promise<QueryReturn> {
+async function queryData(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<QueryReturn> {
   const { page = 1, pageSize = 20 } = input;
   const where = buildWhere(input);
   const offset = (page - 1) * pageSize;
@@ -165,7 +166,7 @@ async function queryData(client: ReportDbClient, input: Input): Promise<QueryRet
 SELECT count(*) AS cnt
 FROM (
   SELECT vendor_part_no, vendor_name
-  FROM (${INNER_SQL}) AS t
+  FROM (${INNER_SQL(access)}) AS t
   ${where}
   GROUP BY vendor_part_no, vendor_name
 ) AS t2`;
@@ -186,7 +187,7 @@ SELECT
     ${sqlGroupUniqArray(engine, "order_no")} AS order_nos,
     ${sqlCastStr(engine, "max(update_time)")} AS update_time
 FROM (
-  SELECT * FROM (${INNER_SQL}) AS t
+  SELECT * FROM (${INNER_SQL(access)}) AS t
   ${where}
 ) AS t2
 GROUP BY vendor_part_no, vendor_name
@@ -205,7 +206,7 @@ SELECT
     sum(wip_qty)      AS wip_qty,
     ${sqlCastStr(engine, "max(update_time)")} AS update_time
 FROM (
-  SELECT * FROM (${INNER_SQL}) AS t
+  SELECT * FROM (${INNER_SQL(access)}) AS t
   ${where}
 ) AS t2`;
 
@@ -236,16 +237,16 @@ FROM (
   return { rows, data: rows, total, totalRow };
 }
 
-async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
+async function queryFilter(client: ReportDbClient, access: ReportAccessContext): Promise<FilterOptions> {
   const [labelR, vendorR, pkgR] = await Promise.all([
     client.query<{ label_name: string }>(
-      `SELECT DISTINCT label_name FROM (${INNER_SQL}) AS t WHERE label_name != '' ORDER BY label_name`,
+      `SELECT DISTINCT label_name FROM (${INNER_SQL(access)}) AS t WHERE label_name != '' ORDER BY label_name`,
     ),
     client.query<{ vendor_name: string }>(
-      `SELECT DISTINCT vendor_name FROM (${INNER_SQL}) AS t WHERE vendor_name != '' ORDER BY vendor_name`,
+      `SELECT DISTINCT vendor_name FROM (${INNER_SQL(access)}) AS t WHERE vendor_name != '' ORDER BY vendor_name`,
     ),
     client.query<{ package_type: string }>(
-      `SELECT DISTINCT package_type FROM (${INNER_SQL}) AS t WHERE package_type != '' ORDER BY package_type`,
+      `SELECT DISTINCT package_type FROM (${INNER_SQL(access)}) AS t WHERE package_type != '' ORDER BY package_type`,
     ),
   ]);
   return {
@@ -255,8 +256,8 @@ async function queryFilter(client: ReportDbClient): Promise<FilterOptions> {
   };
 }
 
-async function queryExport(client: ReportDbClient, input: Input): Promise<ExportReturn> {
-  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 });
+async function queryExport(client: ReportDbClient, input: Input, access: ReportAccessContext): Promise<ExportReturn> {
+  const r = await queryData(client, { ...input, page: 1, pageSize: 999_999 }, access);
   return { data: r.rows, total: r.total, totalRow: r.totalRow };
 }
 
@@ -295,7 +296,7 @@ const plugin: ReportPlugin<
   filterOptionsInputSchema: undefined,
 
   query: queryData,
-  filterOptions: (client) => queryFilter(client),
+  filterOptions: (client, _input, access) => queryFilter(client, access),
   exportQuery: queryExport,
 
   emptyQueryResult: {

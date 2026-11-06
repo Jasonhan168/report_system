@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/session";
 import { useState, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAutoTitles } from "@/hooks/useAutoTitles";
@@ -79,7 +80,7 @@ export default function PkgWipInprocDetail() {
       if (vendorName) params.set("vendorName", vendorName);
       if (labelName) params.set("labelName", labelName);
       if (vendorPartNo) params.set("vendorPartNo", vendorPartNo);
-      const resp = await fetch(`/api/export/pkg-wip-inproc-detail?${params}`);
+      const resp = await sessionFetch(`/api/export/pkg-wip-inproc-detail?${params}`);
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);

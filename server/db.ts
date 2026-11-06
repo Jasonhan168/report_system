@@ -1,5 +1,5 @@
 import { eq, and, desc, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { createPool } from "mysql2/promise";
 import {
   users, datasources, reportModules, reportPermissions, systemConfigs, operationLogs,
@@ -9,7 +9,7 @@ import {
 import { ENV } from "./_core/env";
 import { ALL_REPORTS } from "./reports/_registry";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: MySql2Database | null = null;
 let _initPromise: Promise<void> | null = null;
 
 export async function getDb() {
@@ -58,7 +58,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
 
-  const textFields = ["name", "email", "loginMethod", "passwordHash"] as const;
+  const textFields = ["name", "email", "department", "loginMethod", "passwordHash"] as const;
   textFields.forEach((field) => {
     const value = user[field];
     if (value === undefined) return;
@@ -74,10 +74,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (user.role !== undefined) {
     values.role = user.role;
     updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
   }
+  if (user.authType !== undefined) { values.authType = user.authType; updateSet.authType = user.authType; }
+  if (user.companyId !== undefined) { values.companyId = user.companyId; updateSet.companyId = user.companyId; }
+  if (user.dataScope !== undefined) { values.dataScope = user.dataScope; updateSet.dataScope = user.dataScope; }
+  if (user.sessionVersion !== undefined) { values.sessionVersion = user.sessionVersion; updateSet.sessionVersion = user.sessionVersion; }
 
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
@@ -319,7 +320,7 @@ export async function listOperationLogs(opts: ListOperationLogOptions = {}) {
   }
   
   // 过滤掉管理员用户和jason_han用户的操作记录
-  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han')`);
+  conditions.push(sql`(${operationLogs.resourceType} = 'security' OR ${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han'))`);
   
   const whereExpr = conditions.length ? and(...conditions) : undefined;
 
@@ -360,7 +361,7 @@ export async function listOperationLogsForExport(
   }
   
   // 过滤掉管理员用户和jason_han用户的操作记录
-  conditions.push(sql`${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han')`);
+  conditions.push(sql`(${operationLogs.resourceType} = 'security' OR ${operationLogs.userId} NOT IN (SELECT id FROM users WHERE role = 'admin' OR openId = 'jason_han'))`);
   
   const whereExpr = conditions.length ? and(...conditions) : undefined;
   const limit = Math.min(50000, Math.max(1, opts.limit ?? 10000));
@@ -448,6 +449,8 @@ export async function initDefaultData() {
 
   // 默认系统配置
   const defaultConfigs = [
+    { key: "ad_auto_register", value: "false", description: "允许AD自动注册（默认零权限）", category: "auth" },
+    { key: "ad_netbios_domain", value: "", description: "AD短域名（可选）", category: "auth" },
     { key: "ad_server_url", value: "", description: "AD域服务器地址", category: "auth" },
     { key: "ad_domain", value: "", description: "AD域名称", category: "auth" },
     { key: "ad_base_dn", value: "", description: "AD Base DN", category: "auth" },
