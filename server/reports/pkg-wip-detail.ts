@@ -51,6 +51,8 @@ function esc(v: string): string {
 }
 
 const TOTAL_WIP_EXPR = `(die_attach + wire_bond + molding + testing + test_done)`;
+/** 行可见条件：在制数量或未投数量任一大于 0（仅有未投数量的行也要展示） */
+const HAS_QTY_EXPR = `(${TOTAL_WIP_EXPR} + ifNull(unissued_qty, 0)) > 0`;
 
 function buildWhere(f: Input): string {
   const date = f.date || localToday();
@@ -76,12 +78,12 @@ async function queryData(client: ReportDbClient, input: Input, access: ReportAcc
   const offset = (page - 1) * pageSize;
   const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0
+  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip WHERE ${where} AND ${HAS_QTY_EXPR}
     and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%') `;
   const dataSql = `
     SELECT ${cols}
     FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
-    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
+    WHERE ${where} AND ${HAS_QTY_EXPR} and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
     ORDER BY date DESC, vendor_name, order_no
     LIMIT ${pageSize} OFFSET ${offset}
   `;
@@ -111,7 +113,7 @@ async function queryFilter(client: ReportDbClient, input: FilterInput, access: R
   const sql = `
     SELECT ${sqlGroupUniqArray(engine, "vendor_name")} AS vendor_names
     FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
-    WHERE date = '${esc(d)}' AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
+    WHERE date = '${esc(d)}' AND ${HAS_QTY_EXPR} and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
   `;
   const r = await client.query<{ vendor_names: unknown }>(sql);
   const row = r[0] ?? { vendor_names: [] };
@@ -124,7 +126,7 @@ async function queryExport(client: ReportDbClient, input: Input, access: ReportA
   const sql = `
     SELECT ${cols}
     FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
-    WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0 and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
+    WHERE ${where} AND ${HAS_QTY_EXPR} and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%')
     ORDER BY date DESC, vendor_name, order_no
     LIMIT 999999
   `;

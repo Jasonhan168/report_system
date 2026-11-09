@@ -74,7 +74,7 @@ export default function PkgWipDetail() {
   const tableRef = useRef<HTMLDivElement>(null);
   useAutoTitles(tableRef, [data]);
 
-  // 服务端已过滤合计WIP=0，total 直接使用服务端返回值
+  // 服务端已过滤 合计WIP数量+未投数量=0，total 直接使用服务端返回值
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
 
   async function handleExport() {
