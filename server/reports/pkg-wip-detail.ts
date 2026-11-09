@@ -73,7 +73,8 @@ async function queryData(client: ReportDbClient, input: Input, access: ReportAcc
   const offset = (page - 1) * pageSize;
   const cols = SELECT_COLS(client.engineType);
 
-  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0`;
+  const countSql = `SELECT count(*) AS cnt FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip WHERE ${where} AND ${TOTAL_WIP_EXPR} > 0
+    and NOT( order_no like '%-SH%' OR order_no like '%-GZ%' OR order_no like '%-XA%' OR order_no like '%-LY%') `;
   const dataSql = `
     SELECT ${cols}
     FROM ${scopedSource("v_dwd_ab_wip", access)} AS v_dwd_ab_wip
