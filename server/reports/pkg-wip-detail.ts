@@ -2,6 +2,7 @@
  * 封装厂WIP明细表 —— 报表插件
  *
  * 数据来源：v_dwd_ab_wip（DWD 明细，按日期筛选）
+ * 未投数量直接取视图字段 unissued_qty（ifNull 兜底 0），不做后端反算
  */
 import { z } from "zod";
 import { scopedSource, type ReportAccessContext } from "./_scope";
@@ -24,6 +25,7 @@ interface Row {
   label_name: string;
   vendor_part_no: string;
   batch_no: string;
+  unissued_qty: number;
   die_attach: number;
   wire_bond: number;
   molding: number;
@@ -62,6 +64,7 @@ function buildWhere(f: Input): string {
 const SELECT_COLS = (engine: ReportDbClient["engineType"]) => `
   ${sqlCastStr(engine, "date")} AS date,
   vendor_name, order_no, label_name, vendor_part_no, batch_no,
+  ifNull(unissued_qty, 0) AS unissued_qty,
   die_attach, wire_bond, molding, testing, test_done,
   ${TOTAL_WIP_EXPR} AS total_wip
 `;
@@ -91,6 +94,7 @@ async function queryData(client: ReportDbClient, input: Input, access: ReportAcc
   const total = parseInt(countR[0]?.cnt ?? "0", 10);
   const rows = (dataR ?? []).map((row) => ({
     ...row,
+    unissued_qty: Number(row.unissued_qty),
     die_attach: Number(row.die_attach),
     wire_bond: Number(row.wire_bond),
     molding: Number(row.molding),
@@ -127,6 +131,7 @@ async function queryExport(client: ReportDbClient, input: Input, access: ReportA
   const r = await client.query<Row>(sql);
   return (r ?? []).map((row) => ({
     ...row,
+    unissued_qty: Number(row.unissued_qty),
     die_attach: Number(row.die_attach),
     wire_bond: Number(row.wire_bond),
     molding: Number(row.molding),
@@ -189,6 +194,8 @@ const plugin: ReportPlugin<Row, Input, FilterInput, FilterOptions> = {
       { header: "标签品名",   width: 20, value: (r) => r.label_name },
       { header: "供应商料号", width: 18, value: (r) => r.vendor_part_no },
       { header: "批号",       width: 14, value: (r) => r.batch_no },
+      { header: "未投数量",   width: 12, value: (r) => r.unissued_qty,
+        totalValue: (rs) => rs.reduce((s, x) => s + (Number(x.unissued_qty) || 0), 0) },
       { header: "装片",       width: 10, value: (r) => r.die_attach,
         totalValue: (rs) => rs.reduce((s, x) => s + (Number(x.die_attach) || 0), 0) },
       { header: "焊线",       width: 10, value: (r) => r.wire_bond,

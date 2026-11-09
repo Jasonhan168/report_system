@@ -119,6 +119,7 @@ export default function PkgWipDetail() {
   // 合计行（使用后端返回的 total_wip 字段）
   const totalRow = rows.reduce(
     (acc, row) => ({
+      unissued_qty: acc.unissued_qty + (Number(row.unissued_qty) || 0),
       die_attach: acc.die_attach + (Number(row.die_attach) || 0),
       wire_bond: acc.wire_bond + (Number(row.wire_bond) || 0),
       molding: acc.molding + (Number(row.molding) || 0),
@@ -126,10 +127,10 @@ export default function PkgWipDetail() {
       test_done: acc.test_done + (Number(row.test_done) || 0),
       total_wip: acc.total_wip + (Number((row as typeof row & { total_wip?: number }).total_wip) || 0),
     }),
-    { die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0, total_wip: 0 }
+    { unissued_qty: 0, die_attach: 0, wire_bond: 0, molding: 0, testing: 0, test_done: 0, total_wip: 0 }
   );
 
-  const COL_COUNT = 12;
+  const COL_COUNT = 13;
 
   return (
     <div ref={tableRef} className="flex flex-col h-full gap-3 p-4 report-page">
@@ -254,6 +255,7 @@ export default function PkgWipDetail() {
               <TableHead className="whitespace-nowrap">标签品名</TableHead>
               <TableHead className="whitespace-nowrap">供应商料号</TableHead>
               <TableHead className="whitespace-nowrap">批号</TableHead>
+              <TableHead className="whitespace-nowrap text-right">未投数量</TableHead>
               <TableHead className="whitespace-nowrap text-right">装片</TableHead>
               <TableHead className="whitespace-nowrap text-right">焊线</TableHead>
               <TableHead className="whitespace-nowrap text-right">塑封</TableHead>
@@ -279,6 +281,7 @@ export default function PkgWipDetail() {
                       <TableCell className="whitespace-nowrap">{row.label_name}</TableCell>
                       <TableCell className="font-mono text-xs whitespace-nowrap">{row.vendor_part_no}</TableCell>
                       <TableCell className="font-mono text-xs whitespace-nowrap">{row.batch_no}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{fmt(row.unissued_qty)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.die_attach)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.wire_bond)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{fmt(row.molding)}</TableCell>
@@ -292,6 +295,7 @@ export default function PkgWipDetail() {
                 {rows.length > 0 && (
                   <TableRow className="bg-muted/60 border-t-2 border-primary/20 font-bold">
                     <TableCell colSpan={6} className="text-primary text-xs font-bold">合计</TableCell>
+                    <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.unissued_qty)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.die_attach)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.wire_bond)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap text-xs">{fmtTotal(totalRow.molding)}</TableCell>

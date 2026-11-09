@@ -339,6 +339,7 @@ SELECT
     vendor_part_no,
     batch_no,
     before_attach,
+    unissued_qty,
     die_attach,
     wire_bond,
     molding,
